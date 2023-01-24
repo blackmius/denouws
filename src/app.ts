@@ -116,7 +116,14 @@ const {
   uws_res_cork,
   uws_res_cork_callback,
 
-  uws_res_upgrade
+  uws_res_upgrade,
+
+  uws_req_get_header,
+  uws_req_get_parameter,
+  uws_req_get_url,
+  uws_req_get_method,
+
+
 } = ffi;
 
 
@@ -421,9 +428,9 @@ class HttpResponse {
   /** Upgrades a HttpResponse to a WebSocket. See UpgradeAsync, UpgradeSync example files. */
   upgrade<UserData>(userData : UserData, secWebSocketKey: string, secWebSocketProtocol: string, secWebSocketExtensions: string, context: us_socket_context_t) : void {
     // TODO: find the way to ref/unref objects
-    const secWebSocketKeyBuffer = toCString(secWebSocketKey);
-    const secWebSocketProtocolBuffer = toCString(secWebSocketProtocol);
-    const secWebSocketExtensionsBuffer = toCString(secWebSocketExtensions);
+    const secWebSocketKeyBuffer = encoder.encode(secWebSocketKey);
+    const secWebSocketProtocolBuffer = encoder.encode(secWebSocketProtocol);
+    const secWebSocketExtensionsBuffer = encoder.encode(secWebSocketExtensions);
     uws_res_upgrade(this.#ssl, this.#handler, null,
       Deno.UnsafePointer.of(secWebSocketKeyBuffer), secWebSocketKeyBuffer.length,
       Deno.UnsafePointer.of(secWebSocketProtocolBuffer), secWebSocketProtocolBuffer.length,
@@ -444,23 +451,71 @@ class HttpRequest {
   }
 
   /** Returns the lowercased header value or empty string. */
-  getHeader(lowerCaseKey: string) : string;
+  getHeader(lowerCaseKey: string) : string {
+    const headerBuffer = encoder.encode(lowerCaseKey);
+    // https://github.com/uNetworking/uWebSockets.js/blob/master/src/HttpRequestWrapper.h#L97
+    // as i see no one cares about overflows;
+    const dest = new Uint8Array();
+    const ptr = Deno.UnsafePointer.of(dest)
+    const size = uws_req_get_header(this.#handler, Deno.UnsafePointer.of(headerBuffer), headerBuffer.length, ptr);
+    return getStringFromPointer(ptr, size);
+  }
   /** Returns the parsed parameter at index. Corresponds to route. */
-  getParameter(index: number) : string;
+  getParameter(index: number) : string {
+    const dest = new Uint8Array();
+    const ptr = Deno.UnsafePointer.of(dest)
+    const size = uws_req_get_parameter(this.#handler, number, ptr);
+    return getStringFromPointer(ptr, size);
+  }
   /** Returns the URL including initial /slash */
-  getUrl() : string;
+  getUrl() : string {
+    const dest = new Uint8Array();
+    const ptr = Deno.UnsafePointer.of(dest)
+    const size = uws_req_get_url(this.#handler, ptr);
+    return getStringFromPointer(ptr, size);
+  }
   /** Returns the lowercased HTTP method, useful for "any" routes. */
-  getMethod() : string;
+  getMethod() : string {
+    const dest = new Uint8Array();
+    const ptr = Deno.UnsafePointer.of(dest)
+    const size = uws_req_get_method(this.#handler, ptr);
+    return getStringFromPointer(ptr, size);
+  }
   /** Returns the HTTP method as-is. */
-  getCaseSensitiveMethod() : string;
+  getCaseSensitiveMethod() : string {
+    const dest = new Uint8Array();
+    const ptr = Deno.UnsafePointer.of(dest)
+    const size = uws_req_get_case_sensitive_method(this.#handler, ptr);
+    return getStringFromPointer(ptr, size);
+  }
+
   /** Returns the raw querystring (the part of URL after ? sign) or empty string. */
   getQuery() : string;
   /** Returns a decoded query parameter value or empty string. */
-  getQuery(key: string) : string;
+  getQuery(key: string) : string {
+    const dest = new Uint8Array();
+    const ptr = Deno.UnsafePointer.of(dest)
+    let size;
+    if (key) {
+      const keyBuffer = encoder.encode(key);
+      size = uws_req_get_query(this.#handler, Deno.UnsafePointer.of(keyBuffer), keyBuffer.length, ptr);
+    } else {
+      size = uws_req_get_query(this.#handler, null, 0, ptr);
+    }
+    return getStringFromPointer(ptr, size);
+  }
+
   /** Loops over all headers. */
-  forEach(cb: (key: string, value: string) => void) : void;
+  forEach(cb: (key: string, value: string) => void) : void {
+    const handler = uws_req_for_each_header_handler((key_ptr, key_size, val_ptr, val_size) => {
+      cb(getStringFromPointer(key_ptr, key_size), getStringFromPointer(val_ptr, val_size));
+    });
+    uws_req_for_each_header(this.#handler, handler.pointer, null);
+  }
   /** Setting yield to true is to say that this route handler did not handle the route, causing the router to continue looking for a matching route handler, or fail. */
-  setYield(yield: boolean) : HttpRequest;
+  setYield(yield_: boolean) : HttpRequest {
+    uws_req_set_field(this.#handle, +yield_);
+  }
 }
 
 /** A structure holding settings and handlers for a WebSocket URL route handler. */
