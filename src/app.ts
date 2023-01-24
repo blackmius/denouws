@@ -264,7 +264,7 @@ class WebSocket<UserData> {
       const data = encode(shortMessage);
       uws_ws_end(this.#ssl, this.#handler, code ?? 0, Deno.UnsafePointer.of(data), data.length);
     } else {
-      uws_ws_end(this.#ssl, this.#handler, code ?? 0, null, null);
+      uws_ws_end(this.#ssl, this.#handler, code ?? 0, null, 0);
     }
   }
 
@@ -281,7 +281,7 @@ class WebSocket<UserData> {
       const data = encode(message);
       return uws_ws_send(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length, OpCode.PING);
     }
-    return uws_ws_send(this.#ssl, this.#handler, null, null, OpCode.PING);
+    return uws_ws_send(this.#ssl, this.#handler, null, 0, OpCode.PING);
   }
 
   /** Subscribe to a topic. */
