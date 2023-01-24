@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-explicit-any
 import ffi from './ffi.ts';
 
 import { Struct } from "https://deno.land/x/struct@1.0.0/mod.ts";
@@ -12,9 +13,14 @@ function encode(data: RecognizedString): Uint8Array {
   return new Uint8Array(data);
 }
 
-function getStringFromPointer(pointer: Deno.PointerValue, length: number): string {
+function getBuffer(pointer: Deno.PointerValue, length: Deno.PointerValue): ArrayBuffer {
   const view = new Deno.UnsafePointerView(pointer);
-  const buf = view.getArrayBuffer(length);
+  const buf = view.getArrayBuffer(length as number);
+  return buf;
+}
+
+function getStringFromPointer(pointer: Deno.PointerValue, length: Deno.PointerValue): string {
+  const buf = getBuffer(pointer, length);
   return decoder.decode(buf);
 }
 
@@ -22,15 +28,14 @@ export function toCString(str: string): Uint8Array {
   return encode(str + "\0");
 }
 
-enum uws_opcode_t
-{
+export enum OpCode {
   CONTINUATION = 0,
   TEXT = 1,
   BINARY = 2,
   CLOSE = 8,
   PING = 9,
   PONG = 10
-};
+}
 
 /** Native type representing a raw uSockets struct us_listen_socket_t.
  * Careful with this one, it is entirely unchecked and native so invalid usage will blow up.
@@ -129,6 +134,30 @@ const {
   uws_get_headers_server_handler,
   uws_req_set_field,
 
+  uws_websocket_upgrade_handler,
+  uws_websocket_handler,
+  uws_websocket_message_handler,
+  uws_websocket_ping_pong_handler,
+  uws_websocket_close_handler,
+  uws_websocket_subscription_handler,
+
+  uws_ws,
+  uws_ws_send,
+  uws_ws_send_with_options,
+  uws_ws_get_buffered_amount,
+  uws_ws_end,
+  uws_ws_close,
+  uws_ws_subscribe,
+  uws_ws_unsubscribe,
+  uws_ws_is_subscribed,
+  uws_ws_iterate_topics,
+  uws_ws_iterate_topics_handler,
+  uws_ws_publish_with_options,
+  uws_ws_cork,
+  uws_ws_cork_callback,
+  uws_ws_get_remote_address,
+  uws_ws_get_remote_address_as_text,
+  uws_ws_get_user_data
 } = ffi;
 
 
@@ -193,11 +222,19 @@ function unpack_uws_try_end_result(pointer: Deno.PointerValue): [boolean, boolea
  */
 export type RecognizedString = string | ArrayBuffer | Uint8Array | Int8Array | Uint16Array | Int16Array | Uint32Array | Int32Array | Float32Array | Float64Array;
 
+export enum SendStatus {
+    BACKPRESSURE,
+    SUCCESS,
+    DROPPED
+}
+
 
 class WebSocket<UserData> {
+  #ssl: number;
   #handler: Deno.PointerValue;
 
-  constructor(handler: Deno.PointerValue) {
+  constructor(ssl: number, handler: Deno.PointerValue) {
+    this.#ssl = ssl;
     this.#handler = handler;
   }
 
@@ -205,45 +242,93 @@ class WebSocket<UserData> {
    *
    * Make sure you properly understand the concept of backpressure. Check the backpressure example file.
    */
-  send(message: RecognizedString, isBinary?: boolean, compress?: boolean) : number;
+  send(message: RecognizedString, isBinary?: boolean, compress?: boolean) : SendStatus {
+    const data = encode(message);
+    return uws_ws_send_with_options(
+      this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length,
+      isBinary ? OpCode.BINARY : OpCode.TEXT, +!!compress, 0);
+  }
 
   /** Returns the bytes buffered in backpressure. This is similar to the bufferedAmount property in the browser counterpart.
    * Check backpressure example.
    */
-  getBufferedAmount() : number;
+  getBufferedAmount() : number {
+    return uws_ws_get_buffered_amount(this.#ssl, this.#handler);
+  }
 
   /** Gracefully closes this WebSocket. Immediately calls the close handler.
    * A WebSocket close message is sent with code and shortMessage.
    */
-  end(code?: number, shortMessage?: RecognizedString) : void;
+  end(code?: number, shortMessage?: RecognizedString) : void {
+    if (shortMessage) {
+      const data = encode(shortMessage);
+      uws_ws_end(this.#ssl, this.#handler, code ?? 0, Deno.UnsafePointer.of(data), data.length);
+    } else {
+      uws_ws_end(this.#ssl, this.#handler, code ?? 0, null, null);
+    }
+  }
 
   /** Forcefully closes this WebSocket. Immediately calls the close handler.
    * No WebSocket close message is sent.
    */
-  close() : void;
+  close() : void {
+    uws_ws_close(this.#ssl, this.#handler);
+  }
 
   /** Sends a ping control message. Returns sendStatus similar to WebSocket.send (regarding backpressure). This helper function correlates to WebSocket::send(message, uWS::OpCode::PING, ...) in C++. */
-  ping(message?: RecognizedString) : number;
+  ping(message?: RecognizedString) : number {
+    if (message) {
+      const data = encode(message);
+      return uws_ws_send(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length, OpCode.PING);
+    }
+    return uws_ws_send(this.#ssl, this.#handler, null, null, OpCode.PING);
+  }
 
   /** Subscribe to a topic. */
-  subscribe(topic: string) : boolean;
+  subscribe(topic: string) : boolean {
+    const data = encode(topic);
+    return !!uws_ws_subscribe(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length);
+  }
 
   /** Unsubscribe from a topic. Returns true on success, if the WebSocket was subscribed. */
-  unsubscribe(topic: string) : boolean;
+  unsubscribe(topic: string) : boolean {
+    const data = encode(topic);
+    return !!uws_ws_unsubscribe(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length);
+  }
 
   /** Returns whether this websocket is subscribed to topic. */
-  isSubscribed(topic: string) : boolean;
+  isSubscribed(topic: string) : boolean {
+    const data = encode(topic);
+    return !!uws_ws_is_subscribed(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length);
+  }
 
   /** Returns a list of topics this websocket is subscribed to. */
-  getTopics() : string[];
+  getTopics() : string[] {
+    const result: string[] = [];
+    const handler = uws_ws_iterate_topics_handler((topicPtr, length) => {
+      result.push(getStringFromPointer(topicPtr, length));
+    });
+    uws_ws_iterate_topics(this.#ssl, this.#handler, handler.pointer, null);
+    return result;
+  }
 
   /** Publish a message under topic. Backpressure is managed according to maxBackpressure, closeOnBackpressureLimit settings.
    * Order is guaranteed since v20.
   */
-  publish(topic: string, message: RecognizedString, isBinary?: boolean, compress?: boolean) : boolean;
+  publish(topic: string, message: RecognizedString, isBinary?: boolean, compress?: boolean) : boolean {
+    const topicBuffer = encode(topic);
+    const messageBuffer = encode(message);
+    return !!uws_ws_publish_with_options(
+      this.#ssl, this.#handler, Deno.UnsafePointer.of(topicBuffer), topicBuffer.length,
+      Deno.UnsafePointer.of(messageBuffer), messageBuffer.length, isBinary ? OpCode.BINARY : OpCode.TEXT, +!!compress
+    );
+  }
 
   /** See HttpResponse.cork. Takes a function in which the socket is corked (packing many sends into one single syscall/SSL block) */
-  cork(cb: () => void) : WebSocket<UserData>;
+  cork(cb: () => void) : WebSocket<UserData> {
+    uws_ws_cork(this.#ssl, this.#handler, uws_ws_cork_callback(cb).pointer, null);
+    return this;
+  }
 
   /** Returns the remote IP address. Note that the returned IP is binary, not text.
    *
@@ -252,13 +337,25 @@ class WebSocket<UserData> {
    *
    * See getRemoteAddressAsText() for a text version.
    */
-  getRemoteAddress() : ArrayBuffer;
+  getRemoteAddress() : ArrayBuffer {
+    const dest = new Uint8Array(16);
+    const length = uws_ws_get_remote_address(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
+    return dest.slice(0, length as number);
+  }
 
   /** Returns the remote IP address as text. See string. */
-  getRemoteAddressAsText() : ArrayBuffer;
+  getRemoteAddressAsText() : ArrayBuffer {
+    const dest = new Uint8Array(45); // maximum ipv6 length as text
+    const length = uws_ws_get_remote_address_as_text(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
+    return dest.slice(0, length as number);
+  }
 
   /** Returns the UserData object. */
-  getUserData() : UserData;
+  getUserData() : UserData {
+    // TODO: придумать че с этим делать
+    uws_ws_get_user_data(this.#ssl, this.#handler);
+    return {} as UserData;
+  }
 }
 
 /** An HttpResponse is valid until either onAborted callback or any of the .end/.tryEnd calls succeed. You may attach user data to this object. */
@@ -377,8 +474,7 @@ class HttpResponse {
   /** Handler for reading data from POST and such requests. You MUST copy the data of chunk if isLast is not true. We Neuter ArrayBuffers on return, making it zero length.*/
   onData(handler: (chunk: ArrayBuffer, isLast: boolean) => void) : HttpResponse {
     const handler_ = uws_res_on_data_handler((_res, pointer, length, is_end) => {
-      const buf = new Deno.UnsafePointerView(pointer);
-      handler(buf.getArrayBuffer(length as number), !!is_end);
+      handler(getBuffer(pointer, length), !!is_end);
     });
     uws_res_on_data(this.#ssl, this.#handler, handler_.pointer, null);
     return this;
@@ -431,7 +527,7 @@ class HttpResponse {
   }
 
   /** Upgrades a HttpResponse to a WebSocket. See UpgradeAsync, UpgradeSync example files. */
-  upgrade<UserData>(userData : UserData, secWebSocketKey: string, secWebSocketProtocol: string, secWebSocketExtensions: string, context: us_socket_context_t) : void {
+  upgrade<UserData>(userData : UserData, secWebSocketKey: string, secWebSocketProtocol: string, secWebSocketExtensions: string, context: us_listen_socket) : void {
     // TODO: find the way to ref/unref objects
     const secWebSocketKeyBuffer = encoder.encode(secWebSocketKey);
     const secWebSocketProtocolBuffer = encoder.encode(secWebSocketProtocol);
@@ -463,35 +559,35 @@ class HttpRequest {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_header(this.#handler, Deno.UnsafePointer.of(headerBuffer), headerBuffer.length, ptr);
-    return getStringFromPointer(ptr, size as number);
+    return getStringFromPointer(ptr, size);
   }
   /** Returns the parsed parameter at index. Corresponds to route. */
   getParameter(index: number) : string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_parameter(this.#handler, index, ptr);
-    return getStringFromPointer(ptr, size as number);
+    return getStringFromPointer(ptr, size);
   }
   /** Returns the URL including initial /slash */
   getUrl() : string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_url(this.#handler, ptr);
-    return getStringFromPointer(ptr, size as number);
+    return getStringFromPointer(ptr, size);
   }
   /** Returns the lowercased HTTP method, useful for "any" routes. */
   getMethod() : string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_method(this.#handler, ptr);
-    return getStringFromPointer(ptr, size as number);
+    return getStringFromPointer(ptr, size);
   }
   /** Returns the HTTP method as-is. */
   getCaseSensitiveMethod() : string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_case_sensitive_method(this.#handler, ptr);
-    return getStringFromPointer(ptr, size as number);
+    return getStringFromPointer(ptr, size);
   }
 
   /** Returns the raw querystring (the part of URL after ? sign) or empty string. */
@@ -507,13 +603,13 @@ class HttpRequest {
     } else {
       size = uws_req_get_query(this.#handler, null, 0, ptr);
     }
-    return getStringFromPointer(ptr, size as number);
+    return getStringFromPointer(ptr, size);
   }
 
   /** Loops over all headers. */
   forEach(cb: (key: string, value: string) => void) : void {
     const handler = uws_get_headers_server_handler((key_ptr, key_size, val_ptr, val_size) => {
-      cb(getStringFromPointer(key_ptr, key_size as number), getStringFromPointer(val_ptr, val_size as number));
+      cb(getStringFromPointer(key_ptr, key_size), getStringFromPointer(val_ptr, val_size));
     });
     uws_req_for_each_header(this.#handler, handler.pointer, null);
   }
@@ -535,6 +631,7 @@ export interface WebSocketBehavior<UserData> {
   /** Maximum amount of seconds that may pass without sending or getting a message. Connection is closed if this timeout passes. Resolution (granularity) for timeouts are typically 4 seconds, rounded to closest.
    * Disable by using 0. Defaults to 120.
    */
+  resetIdleTimeoutOnSend?: boolean;
   idleTimeout?: number;
   /** What permessage-deflate compression to use. uWS.DISABLED, uWS.SHARED_COMPRESSOR or any of the uWS.DEDICATED_COMPRESSOR_xxxKB. Defaults to uWS.DISABLED. */
   compression?: CompressOptions;
@@ -545,7 +642,7 @@ export interface WebSocketBehavior<UserData> {
   /** Upgrade handler used to intercept HTTP upgrade requests and potentially upgrade to WebSocket.
    * See UpgradeAsync and UpgradeSync example files.
    */
-  upgrade?: (res: HttpResponse, req: HttpRequest, context: us_socket_context_t) => void;
+  upgrade?: (res: HttpResponse, req: HttpRequest, context: us_listen_socket) => void;
   /** Handler for new WebSocket connection. WebSocket is valid from open to close, no errors. */
   open?: (ws: WebSocket<UserData>) => void;
   /** Handler for a WebSocket message. Messages are given as ArrayBuffer no matter if they are binary or not. Given ArrayBuffer is valid during the lifetime of this callback (until first await or return) and will be neutered. */
@@ -560,6 +657,99 @@ export interface WebSocketBehavior<UserData> {
   pong?: (ws: WebSocket<UserData>, message: ArrayBuffer) => void;
   /** Handler for subscription changes. */
   subscription?: (ws: WebSocket<UserData>, topic: ArrayBuffer, newCount: number, oldCount: number) => void;
+}
+
+export enum CompressOptions {
+    /* These are not actual compression options */
+    _COMPRESSOR_MASK = 0x00FF,
+    _DECOMPRESSOR_MASK = 0x0F00,
+    /* Disabled, shared, shared are "special" values */
+    DISABLED = 0,
+    SHARED_COMPRESSOR = 1,
+    SHARED_DECOMPRESSOR = 1 << 8,
+    /* Highest 4 bits describe decompressor */
+    DEDICATED_DECOMPRESSOR_32KB = 15 << 8,
+    DEDICATED_DECOMPRESSOR_16KB = 14 << 8,
+    DEDICATED_DECOMPRESSOR_8KB = 13 << 8,
+    DEDICATED_DECOMPRESSOR_4KB = 12 << 8,
+    DEDICATED_DECOMPRESSOR_2KB = 11 << 8,
+    DEDICATED_DECOMPRESSOR_1KB = 10 << 8,
+    DEDICATED_DECOMPRESSOR_512B = 9 << 8,
+    /* Same as 32kb */
+    DEDICATED_DECOMPRESSOR = 15 << 8,
+
+    /* Lowest 8 bit describe compressor */
+    DEDICATED_COMPRESSOR_3KB = 9 << 4 | 1,
+    DEDICATED_COMPRESSOR_4KB = 9 << 4 | 2,
+    DEDICATED_COMPRESSOR_8KB = 10 << 4 | 3,
+    DEDICATED_COMPRESSOR_16KB = 11 << 4 | 4,
+    DEDICATED_COMPRESSOR_32KB = 12 << 4 | 5,
+    DEDICATED_COMPRESSOR_64KB = 13 << 4 | 6,
+    DEDICATED_COMPRESSOR_128KB = 14 << 4 | 7,
+    DEDICATED_COMPRESSOR_256KB = 15 << 4 | 8,
+    /* Same as 256kb */
+    DEDICATED_COMPRESSOR = 15 << 4 | 8
+}
+
+// struct uws_socket_behavior_t {
+//     uws_compress_options_t compression;
+//     /* Maximum message size we can receive */
+//     unsigned int maxPayloadLength;
+//     /* 2 minutes timeout is good */
+//     unsigned short idleTimeout;
+//     /* 64kb backpressure is probably good */
+//     unsigned int maxBackpressure;
+//     bool closeOnBackpressureLimit;
+//     /* This one depends on kernel timeouts and is a bad default */
+//     bool resetIdleTimeoutOnSend;
+//     /* A good default, esp. for newcomers */
+//     bool sendPingsAutomatically;
+//     /* Maximum socket lifetime in seconds before forced closure (defaults to disabled) */
+//     unsigned short maxLifetime;
+//     uws_websocket_upgrade_handler upgrade;
+//     uws_websocket_handler open;
+//     uws_websocket_message_handler message;
+//     uws_websocket_handler drain;
+//     uws_websocket_ping_pong_handler ping;
+//     uws_websocket_ping_pong_handler pong;
+//     uws_websocket_close_handler close;
+//     uws_websocket_subscription_handler subscription;
+// };
+function getWebsocketBehaviorBuffer<UserData>(ssl: number, behavior: WebSocketBehavior<UserData>): Uint8Array {
+  return Struct.pack(">hlhl???hllllllll", [
+    behavior.compression ?? CompressOptions.DISABLED,
+    behavior.maxPayloadLength ?? 16 * 1024,
+    behavior.idleTimeout ?? 12,
+    behavior.maxBackpressure ?? 64 * 1024,
+    behavior.closeOnBackpressureLimit ?? false,
+    behavior.resetIdleTimeoutOnSend ?? true,
+    behavior.sendPingsAutomatically ?? true,
+    behavior.maxLifetime ?? 0,
+    behavior.upgrade ? uws_websocket_upgrade_handler((res, req, context) => {
+      behavior.upgrade!(new HttpResponse(ssl, res), new HttpRequest(req), context);
+    }).pointer : 0,
+    behavior.open ? uws_websocket_handler((ws) => {
+      behavior.open!(new WebSocket(ssl, ws));
+    }).pointer : 0,
+    behavior.message ? uws_websocket_message_handler((ws, messagePtr, length, opcode) => {
+      behavior.message!(new WebSocket(ssl, ws), getBuffer(messagePtr, length), opcode === OpCode.BINARY);
+    }).pointer : 0,
+    behavior.drain ? uws_websocket_handler((ws) => {
+      behavior.drain!(new WebSocket(ssl, ws));
+    }).pointer : 0,
+    behavior.ping ? uws_websocket_ping_pong_handler((ws, messagePtr, length) => {
+      behavior.ping!(new WebSocket(ssl, ws), getBuffer(messagePtr, length));
+    }).pointer : 0,
+    behavior.pong ? uws_websocket_ping_pong_handler((ws, messagePtr, length) => {
+      behavior.pong!(new WebSocket(ssl, ws), getBuffer(messagePtr, length));
+    }).pointer : 0,
+    behavior.close ? uws_websocket_close_handler((ws, code, messagePtr, length) => {
+      behavior.close!(new WebSocket(ssl, ws), code, getBuffer(messagePtr, length));
+    }).pointer : 0,
+    behavior.subscription ? uws_websocket_subscription_handler((ws, topicPtr, length, newCount, oldCount) => {
+      behavior.subscription!(new WebSocket(ssl, ws), getBuffer(topicPtr, length), newCount as number, oldCount as number);
+    }).pointer : 0
+  ]);
 }
 
 /** TemplatedApp is either an SSL or non-SSL app. See App for more info, read user manual. */
@@ -671,6 +861,8 @@ class TemplatedApp {
 
   /** Registers a handler matching specified URL pattern where WebSocket upgrade requests are caught. */
   ws<UserData>(pattern: string, behavior: WebSocketBehavior<UserData>) : TemplatedApp {
+    const behaviorBuffer = getWebsocketBehaviorBuffer(this.#ssl, behavior);
+    uws_ws(this.#ssl, this.#handle, Deno.UnsafePointer.of(toCString(pattern)), behaviorBuffer, null);
     return this;
   }
   /** Publishes a message under topic, for all WebSockets under this app. See WebSocket.publish. */
@@ -681,7 +873,7 @@ class TemplatedApp {
       this.#ssl, this.#handle,
       Deno.UnsafePointer.of(topicBuffer), topicBuffer.length,
       Deno.UnsafePointer.of(messageBuffer), messageBuffer.length,
-      isBinary ? uws_opcode_t.BINARY : uws_opcode_t.TEXT, +compress);
+      isBinary ? OpCode.BINARY : OpCode.TEXT, +compress);
   }
   /** Returns number of subscribers for this topic. */
   numSubscribers(topic: string) : number {
@@ -708,7 +900,7 @@ class TemplatedApp {
   /** Registers a synchronous callback on missing server names. See /examples/ServerName.js. */
   missingServerName(cb: (hostname: string) => void): TemplatedApp {
     const handler = uws_missing_server_handler((pointer, length) => {
-      cb(getStringFromPointer(pointer, length as number));
+      cb(getStringFromPointer(pointer, length));
     });
     uws_missing_server_name(this.#ssl, this.#handle, handler.pointer, null);
     return this;
