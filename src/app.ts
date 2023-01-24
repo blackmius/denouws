@@ -55,7 +55,12 @@ const {
   uws_app_trace,
   uws_app_any,
 
-  uws_res_end
+  uws_ws_publish_with_options,
+
+  uws_res_end,
+
+  uws_listen_handler,
+  uws_method_handler
 } = ffi;
 
 function getAppOptionsBuffer(options: AppOptions): Uint8Array {
@@ -351,15 +356,7 @@ class TemplatedApp {
   listen(): TemplatedApp {
     if (arguments.length === 2) {
       const [port, cb] = arguments;
-      const listen_handler = new Deno.UnsafeCallback(
-        {
-          parameters: ["pointer", "buffer", "pointer"],
-          result: "void",
-        } as const,
-        (listen_socket: us_listen_socket) => {
-          cb(listen_socket);
-        }
-      );
+      const listen_handler = uws_listen_handler((listen_socket: us_listen_socket) => cb(listen_socket));
       uws_app_listen(this.#ssl, this.#handle, port, listen_handler.pointer, null);
     }
 
@@ -373,16 +370,7 @@ class TemplatedApp {
         config.host = host;
         config.port = port;
       }
-
-      const listen_handler = new Deno.UnsafeCallback(
-        {
-          parameters: ["pointer", "buffer", "pointer"],
-          result: "void",
-        } as const,
-        (listen_socket: us_listen_socket) => {
-          cb(listen_socket);
-        }
-      );
+      const listen_handler = uws_listen_handler((listen_socket: us_listen_socket) => cb(listen_socket));
       const configBuffer = getListenConfigBuffer(config);
       uws_app_listen_with_config(this.#ssl, this.#handle, configBuffer, listen_handler.pointer, null);
     }
@@ -393,22 +381,12 @@ class TemplatedApp {
   }
 
   #generateHTTPHandler(
-    method: (ssl: number, app: Deno.PointerValue, pattern: Deno.PointerValue, handler: Deno.PointerValue, userData: Deno.PointerValue) => void,
+    method: typeof uws_app_any, // all http handler methods has same interface
     pattern: string,
     handler: (res: HttpResponse, req: HttpRequest) => void
   ) {
-    const _handler = new Deno.UnsafeCallback(
-      {
-        parameters: ["pointer", "pointer", "pointer"],
-        result: "void",
-      } as const,
-      (res: Deno.PointerValue, req: Deno.PointerValue, user_data: Deno.PointerValue) => {
-        try {
-        handler(new HttpResponse(this.#ssl, res), new HttpRequest(req));
-        } catch(e) {
-          console.error(e)
-        }
-      },
+    const _handler = uws_method_handler(
+      (res: Deno.PointerValue, req: Deno.PointerValue) => handler(new HttpResponse(this.#ssl, res), new HttpRequest(req))
     );
     method(this.#ssl, this.#handle, Deno.UnsafePointer.of(toCString(pattern)), _handler.pointer, null);
     return this;
@@ -458,7 +436,10 @@ class TemplatedApp {
   /** Registers a handler matching specified URL pattern where WebSocket upgrade requests are caught. */
   ws<UserData>(pattern: string, behavior: WebSocketBehavior<UserData>) : TemplatedApp;
   /** Publishes a message under topic, for all WebSockets under this app. See WebSocket.publish. */
-  publish(topic: string, message: string, isBinary?: boolean, compress?: boolean) : boolean;
+  publish(topic: string, message: string, isBinary?: boolean, compress?: boolean) : boolean {
+    int ssl, uws_websocket_t *ws, const char *topic, size_t topic_length, const char *message, size_t message_length, uws_opcode_t opcode, bool compress
+    uws_ws_publish_with_options(this.#ssl)
+  }
   /** Returns number of subscribers for this topic. */
   numSubscribers(topic: string) : number;
   /** Adds a server name. */
