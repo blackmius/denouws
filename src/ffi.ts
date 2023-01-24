@@ -104,7 +104,12 @@ const symbols = {
   uws_ws_get_remote_address: { parameters: ["u8", "pointer", "pointer"], result: "usize" },
   // size_t uws_ws_get_remote_address_as_text(int ssl, uws_websocket_t *ws, const char **dest);
   uws_ws_get_remote_address_as_text: { parameters: ["u8", "pointer", "pointer"], result: "usize" },
-  
+
+  // size_t uws_res_get_proxied_remote_address(int ssl, uws_res_t *res, const char **dest);
+  uws_res_get_proxied_remote_address: { parameters: ["u8", "pointer", "pointer"], result: "usize" },
+  // size_t uws_res_get_proxied_remote_address_as_text(int ssl, uws_res_t *res, const char **dest);
+  uws_res_get_proxied_remote_address_as_text: { parameters: ["u8", "pointer", "pointer"], result: "usize" },
+
   // Response
   
   // void uws_res_end(int ssl, uws_res_t *res, const char *data, size_t length, bool close_connection);
@@ -204,11 +209,11 @@ const handlers_symbols = {
   // void (*callback)(const char *topic, size_t length, void *user_data)
   uws_ws_iterate_topics_handler: { parameters: ["pointer", "usize", "pointer"], result: "void" },
 
-  // void(*callback)(uws_res_t *res, void* user_data)
+  // void (*callback)(uws_res_t *res, void* user_data)
   uws_res_cork_callback: { parameters: ["pointer", "pointer"], result: "void" },
   
   // bool (*handler)(uws_res_t *res, uintmax_t, void *opcional_data)
-  uws_res_on_writable_handler: { parameters: ["pointer", "usize", "pointer"], result: "void" },
+  uws_res_on_writable_handler: { parameters: ["pointer", "usize", "pointer"], result: "u8" },
 
   // void (*handler)(uws_res_t *res, void *opcional_data)
   uws_res_on_aborted_handler: { parameters: ["pointer", "pointer"], result: "void" },
