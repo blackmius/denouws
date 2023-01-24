@@ -109,7 +109,7 @@ const {
   uws_res_on_data_handler,
 
   uws_res_get_remote_address,
-  uws_res_get_remote_address_as_text
+  uws_res_get_remote_address_as_text,
   uws_res_get_proxied_remote_address,
   uws_res_get_proxied_remote_address_as_text,
   
@@ -122,7 +122,12 @@ const {
   uws_req_get_parameter,
   uws_req_get_url,
   uws_req_get_method,
+  uws_req_get_case_sensitive_method,
 
+  uws_req_get_query,
+  uws_req_for_each_header,
+  uws_get_headers_server_handler,
+  uws_req_set_field,
 
 } = ffi;
 
@@ -352,10 +357,10 @@ class HttpResponse {
    * Writing nothing is always success, so by default you must return true.
    */
   onWritable(handler: (offset: number) => boolean) : HttpResponse {
-    const handler = uws_res_on_writable_handler((_res, offset) => {
+    const handler_ = uws_res_on_writable_handler((_res, offset) => {
       return +!!handler(offset as number);
     });
-    uws_res_on_writable(this.#ssl, this.#handler, handler.pointer, null);
+    uws_res_on_writable(this.#ssl, this.#handler, handler_.pointer, null);
     return this;
   }
 
@@ -364,18 +369,18 @@ class HttpResponse {
    * without attaching (by calling onAborted) an abort handler is ill-use and will terminate.
    * When this event emits, the response has been aborted and may not be used. */
   onAborted(handler: () => void) : HttpResponse {
-    const handler = uws_res_on_aborted_handler(handler);
-    uws_res_on_aborted(this.#ssl, this.#handler, handler.pointer, null);
+    const handler_ = uws_res_on_aborted_handler(handler);
+    uws_res_on_aborted(this.#ssl, this.#handler, handler_.pointer, null);
     return this;
   }
 
   /** Handler for reading data from POST and such requests. You MUST copy the data of chunk if isLast is not true. We Neuter ArrayBuffers on return, making it zero length.*/
   onData(handler: (chunk: ArrayBuffer, isLast: boolean) => void) : HttpResponse {
-    const handler = uws_res_on_data_handler((_res, pointer, length, is_end) => {
-      const buf = Deno.UnsafePointerView(pointer);
-      handler(buf.getArrayBuffer(length), !!is_end);
+    const handler_ = uws_res_on_data_handler((_res, pointer, length, is_end) => {
+      const buf = new Deno.UnsafePointerView(pointer);
+      handler(buf.getArrayBuffer(length as number), !!is_end);
     });
-    uws_res_on_data(this.#ssl, this.#handler, handler.pointer, null);
+    uws_res_on_data(this.#ssl, this.#handler, handler_.pointer, null);
     return this;
   }
 
@@ -383,28 +388,28 @@ class HttpResponse {
   getRemoteAddress() : ArrayBuffer {
     const dest = new Uint8Array(16);
     const length = uws_res_get_remote_address(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
-    return dest.slice(0, length);
+    return dest.slice(0, length as number);
   }
 
   /** Returns the remote IP address as text. */
   getRemoteAddressAsText() : ArrayBuffer {
     const dest = new Uint8Array(45); // maximum ipv6 length as text
-    const length = uws_res_get_remote_address(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
-    return dest.slice(0, length);
+    const length = uws_res_get_remote_address_as_text(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
+    return dest.slice(0, length as number);
   }
 
   /** Returns the remote IP address in binary format (4 or 16 bytes), as reported by the PROXY Protocol v2 compatible proxy. */
   getProxiedRemoteAddress() : ArrayBuffer {
     const dest = new Uint8Array(16);
     const length = uws_res_get_proxied_remote_address(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
-    return dest.slice(0, length);
+    return dest.slice(0, length as number);
   }
 
   /** Returns the remote IP address as text, as reported by the PROXY Protocol v2 compatible proxy. */
   getProxiedRemoteAddressAsText() : ArrayBuffer {
     const dest = new Uint8Array(45); // maximum ipv6 length as text
     const length = uws_res_get_proxied_remote_address_as_text(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
-    return dest.slice(0, length);
+    return dest.slice(0, length as number);
   }
 
   /** Corking a response is a performance improvement in both CPU and network, as you ready the IO system for writing multiple chunks at once.
@@ -458,41 +463,41 @@ class HttpRequest {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_header(this.#handler, Deno.UnsafePointer.of(headerBuffer), headerBuffer.length, ptr);
-    return getStringFromPointer(ptr, size);
+    return getStringFromPointer(ptr, size as number);
   }
   /** Returns the parsed parameter at index. Corresponds to route. */
   getParameter(index: number) : string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
-    const size = uws_req_get_parameter(this.#handler, number, ptr);
-    return getStringFromPointer(ptr, size);
+    const size = uws_req_get_parameter(this.#handler, index, ptr);
+    return getStringFromPointer(ptr, size as number);
   }
   /** Returns the URL including initial /slash */
   getUrl() : string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_url(this.#handler, ptr);
-    return getStringFromPointer(ptr, size);
+    return getStringFromPointer(ptr, size as number);
   }
   /** Returns the lowercased HTTP method, useful for "any" routes. */
   getMethod() : string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_method(this.#handler, ptr);
-    return getStringFromPointer(ptr, size);
+    return getStringFromPointer(ptr, size as number);
   }
   /** Returns the HTTP method as-is. */
   getCaseSensitiveMethod() : string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_case_sensitive_method(this.#handler, ptr);
-    return getStringFromPointer(ptr, size);
+    return getStringFromPointer(ptr, size as number);
   }
 
   /** Returns the raw querystring (the part of URL after ? sign) or empty string. */
   getQuery() : string;
   /** Returns a decoded query parameter value or empty string. */
-  getQuery(key: string) : string {
+  getQuery(key?: string) : string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     let size;
@@ -502,19 +507,20 @@ class HttpRequest {
     } else {
       size = uws_req_get_query(this.#handler, null, 0, ptr);
     }
-    return getStringFromPointer(ptr, size);
+    return getStringFromPointer(ptr, size as number);
   }
 
   /** Loops over all headers. */
   forEach(cb: (key: string, value: string) => void) : void {
-    const handler = uws_req_for_each_header_handler((key_ptr, key_size, val_ptr, val_size) => {
-      cb(getStringFromPointer(key_ptr, key_size), getStringFromPointer(val_ptr, val_size));
+    const handler = uws_get_headers_server_handler((key_ptr, key_size, val_ptr, val_size) => {
+      cb(getStringFromPointer(key_ptr, key_size as number), getStringFromPointer(val_ptr, val_size as number));
     });
     uws_req_for_each_header(this.#handler, handler.pointer, null);
   }
   /** Setting yield to true is to say that this route handler did not handle the route, causing the router to continue looking for a matching route handler, or fail. */
   setYield(yield_: boolean) : HttpRequest {
-    uws_req_set_field(this.#handle, +yield_);
+    uws_req_set_field(this.#handler, +yield_);
+    return this;
   }
 }
 
