@@ -44,7 +44,7 @@ const uws_app_listen_config_t: Deno.NativeType[] = ["u16", "pointer", "u8"];
 //     uws_websocket_close_handler close;
 //     uws_websocket_subscription_handler subscription;
 // };
-const uws_socket_behavior_t: Deno.NativeType[] = ["u16", "u32", "u16", "u16", "u32", "u8", "u8", "u8", "u32", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer"];
+const uws_socket_behavior_t: Deno.NativeType[] = ["u32", "u32", "u32", "u32", "u32", "u8", "u8", "u8", "u32", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer"];
 
 // struct uws_try_end_result_t {
 //   bool ok;
@@ -56,27 +56,27 @@ const symbols = {
   // uws_app_t *uws_create_app(int ssl, struct us_socket_context_options_t options);
   uws_create_app: { parameters: ["u8", { struct: us_socket_context_options_t }], result: "pointer" },
   // void uws_app_destroy(int ssl, uws_app_t *app);
-  uws_app_destroy: { parameters: ["u8", "pointer"], result: "void"},
+  uws_app_destroy: { parameters: ["u8", "pointer"], result: "void" },
   // void uws_app_get(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_get: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_get: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
   // void uws_app_post(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_post: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_post: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
   // void uws_app_options(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_options: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_options: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
   // void uws_app_delete(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_delete: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_delete: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
   // void uws_app_patch(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_patch: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_patch: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
   // void uws_app_put(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_put: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_put: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
   // void uws_app_head(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_head: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_head: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
   // void uws_app_connect(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_connect: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_connect: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
   // void uws_app_trace(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_trace: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_trace: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
   // void uws_app_any(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
-  uws_app_any: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void"},
+  uws_app_any: { parameters: ["u8", "pointer", "pointer", "function", "pointer"], result: "void" },
 
   // void uws_app_run(int ssl, uws_app_t *);
   uws_app_run: { parameters: ["u8", "pointer"], result: "void" },

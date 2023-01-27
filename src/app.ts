@@ -163,7 +163,7 @@ const {
 
 function packAppOptionsBuffer(options: AppOptions): Uint8Array {
   return Struct.pack(
-    ">llllll?",
+    "<llllll?",
     [
       Deno.UnsafePointer.of(toCString(options.key_file_name)),
       Deno.UnsafePointer.of(toCString(options.cert_file_name)),
@@ -178,7 +178,7 @@ function packAppOptionsBuffer(options: AppOptions): Uint8Array {
 
 function packListenConfigBuffer(config: ListenConfig) {
   return Struct.pack(
-    ">ll?",
+    "<ll?",
     [
       config.port ?? 0,
       Deno.UnsafePointer.of(toCString(config.host)),
@@ -209,8 +209,7 @@ export enum SendStatus {
     DROPPED
 }
 
-
-class WebSocket<UserData> {
+class _WebSocket<UserData> {
   #ssl: number;
   #handler: Deno.PointerValue;
 
@@ -223,7 +222,7 @@ class WebSocket<UserData> {
    *
    * Make sure you properly understand the concept of backpressure. Check the backpressure example file.
    */
-  send(message: RecognizedString, isBinary?: boolean, compress?: boolean) : SendStatus {
+  send(message: RecognizedString, isBinary?: boolean, compress?: boolean): SendStatus {
     const data = encode(message);
     return uws_ws_send_with_options(
       this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length,
@@ -233,14 +232,14 @@ class WebSocket<UserData> {
   /** Returns the bytes buffered in backpressure. This is similar to the bufferedAmount property in the browser counterpart.
    * Check backpressure example.
    */
-  getBufferedAmount() : number {
+  getBufferedAmount(): number {
     return uws_ws_get_buffered_amount(this.#ssl, this.#handler);
   }
 
   /** Gracefully closes this WebSocket. Immediately calls the close handler.
    * A WebSocket close message is sent with code and shortMessage.
    */
-  end(code?: number, shortMessage?: RecognizedString) : void {
+  end(code?: number, shortMessage?: RecognizedString): void {
     if (shortMessage) {
       const data = encode(shortMessage);
       uws_ws_end(this.#ssl, this.#handler, code ?? 0, Deno.UnsafePointer.of(data), data.length);
@@ -252,12 +251,12 @@ class WebSocket<UserData> {
   /** Forcefully closes this WebSocket. Immediately calls the close handler.
    * No WebSocket close message is sent.
    */
-  close() : void {
+  close(): void {
     uws_ws_close(this.#ssl, this.#handler);
   }
 
   /** Sends a ping control message. Returns sendStatus similar to WebSocket.send (regarding backpressure). This helper function correlates to WebSocket::send(message, uWS::OpCode::PING, ...) in C++. */
-  ping(message?: RecognizedString) : number {
+  ping(message?: RecognizedString): number {
     if (message) {
       const data = encode(message);
       return uws_ws_send(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length, OpCode.PING);
@@ -266,25 +265,25 @@ class WebSocket<UserData> {
   }
 
   /** Subscribe to a topic. */
-  subscribe(topic: string) : boolean {
+  subscribe(topic: string): boolean {
     const data = encode(topic);
     return !!uws_ws_subscribe(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length);
   }
 
   /** Unsubscribe from a topic. Returns true on success, if the WebSocket was subscribed. */
-  unsubscribe(topic: string) : boolean {
+  unsubscribe(topic: string): boolean {
     const data = encode(topic);
     return !!uws_ws_unsubscribe(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length);
   }
 
   /** Returns whether this websocket is subscribed to topic. */
-  isSubscribed(topic: string) : boolean {
+  isSubscribed(topic: string): boolean {
     const data = encode(topic);
     return !!uws_ws_is_subscribed(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length);
   }
 
   /** Returns a list of topics this websocket is subscribed to. */
-  getTopics() : string[] {
+  getTopics(): string[] {
     const result: string[] = [];
     const handler = uws_ws_iterate_topics_handler((topicPtr, length) => {
       result.push(getStringFromPointer(topicPtr, length));
@@ -296,7 +295,7 @@ class WebSocket<UserData> {
   /** Publish a message under topic. Backpressure is managed according to maxBackpressure, closeOnBackpressureLimit settings.
    * Order is guaranteed since v20.
   */
-  publish(topic: string, message: RecognizedString, isBinary?: boolean, compress?: boolean) : boolean {
+  publish(topic: string, message: RecognizedString, isBinary?: boolean, compress?: boolean): boolean {
     const topicBuffer = encode(topic);
     const messageBuffer = encode(message);
     return !!uws_ws_publish_with_options(
@@ -306,8 +305,9 @@ class WebSocket<UserData> {
   }
 
   /** See HttpResponse.cork. Takes a function in which the socket is corked (packing many sends into one single syscall/SSL block) */
-  cork(cb: () => void) : WebSocket<UserData> {
+  cork(cb: () => void): WebSocket<UserData> {
     uws_ws_cork(this.#ssl, this.#handler, uws_ws_cork_callback(cb).pointer, null);
+    // @ts-ignore: this is actually Websocket<UserData>
     return this;
   }
 
@@ -318,26 +318,22 @@ class WebSocket<UserData> {
    *
    * See getRemoteAddressAsText() for a text version.
    */
-  getRemoteAddress() : ArrayBuffer {
+  getRemoteAddress(): ArrayBuffer {
     const dest = new Uint8Array(16);
     const length = uws_ws_get_remote_address(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
     return dest.slice(0, length as number);
   }
 
   /** Returns the remote IP address as text. See string. */
-  getRemoteAddressAsText() : ArrayBuffer {
+  getRemoteAddressAsText(): ArrayBuffer {
     const dest = new Uint8Array(45); // maximum ipv6 length as text
     const length = uws_ws_get_remote_address_as_text(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
     return dest.slice(0, length as number);
   }
-
-  /** Returns the UserData object. */
-  getUserData() : UserData {
-    // TODO: придумать че с этим делать
-    uws_ws_get_user_data(this.#ssl, this.#handler);
-    return {} as UserData;
-  }
 }
+
+type WebSocket<T> = _WebSocket<T> & T;
+const WebSocket = _WebSocket;
 
 /** An HttpResponse is valid until either onAborted callback or any of the .end/.tryEnd calls succeed. You may attach user data to this object. */
 class HttpResponse {
@@ -365,16 +361,16 @@ class HttpResponse {
   }
 
   /** Pause http body streaming (throttle) */
-  pause() : void {
+  pause(): void {
     uws_res_pause(this.#ssl, this.#handler);
   }
 
   /** Resume http body streaming (unthrottle) */
-  resume() : void {
+  resume(): void {
     uws_res_resume(this.#ssl, this.#handler);
   }
 
-  writeStatus(status: RecognizedString) : HttpResponse {
+  writeStatus(status: RecognizedString): HttpResponse {
     const statusBuffer = encode(status);
     uws_res_write_status(this.#ssl, this.#handler, Deno.UnsafePointer.of(statusBuffer), statusBuffer.length);
     return this;
@@ -382,19 +378,19 @@ class HttpResponse {
   /** Writes key and value to HTTP response.
    * See writeStatus and corking.
   */
-  writeHeader(key: RecognizedString, value: RecognizedString) : HttpResponse {
+  writeHeader(key: RecognizedString, value: RecognizedString): HttpResponse {
     const keyBuffer = encode(key);
     const valueBuffer = encode(value);
     uws_res_write_header(this.#ssl, this.#handler, Deno.UnsafePointer.of(keyBuffer), keyBuffer.length, Deno.UnsafePointer.of(valueBuffer), valueBuffer.length);
     return this;
   }
   /** Enters or continues chunked encoding mode. Writes part of the response. End with zero length write. Returns true if no backpressure was added. */
-  write(chunk: RecognizedString) : boolean {
+  write(chunk: RecognizedString): boolean {
     const data = encode(chunk);
     return !!uws_res_write(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length);
   }
   /** Ends this response by copying the contents of body. */
-  end(body?: RecognizedString, closeConnection?: boolean) : HttpResponse {
+  end(body?: RecognizedString, closeConnection?: boolean): HttpResponse {
     if (body) {
       const data = encode(body);
       uws_res_end(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length, +!!closeConnection);
@@ -404,7 +400,7 @@ class HttpResponse {
     return this;
   }
   /** Ends this response without a body. */
-  endWithoutBody(reportedContentLength?: number, closeConnection?: boolean) : HttpResponse {
+  endWithoutBody(reportedContentLength?: number, closeConnection?: boolean): HttpResponse {
     // TODO: check what this function really do
     if (reportedContentLength != undefined) {
       this.writeHeader('content-length', ''+reportedContentLength);
@@ -413,20 +409,20 @@ class HttpResponse {
     return this;
   }
   /** Ends this response, or tries to, by streaming appropriately sized chunks of body. Use in conjunction with onWritable. Returns tuple [ok, hasResponded].*/
-  tryEnd(fullBodyOrChunk: RecognizedString, totalSize: number) : [boolean, boolean] {
+  tryEnd(fullBodyOrChunk: RecognizedString, totalSize: number): [boolean, boolean] {
     const data = encode(fullBodyOrChunk);
     const result = uws_res_try_end(this.#ssl, this.#handler, Deno.UnsafePointer.of(data), data.length, totalSize, 0);
     return unpack_uws_try_end_result(result);
   }
 
   /** Immediately force closes the connection. Any onAborted callback will run. */
-  close() : HttpResponse {
+  close(): HttpResponse {
     // TODO: check onAborted callback
     return this.endWithoutBody(0, true);
   }
 
   /** Returns the global byte write offset for this response. Use with onWritable. */
-  getWriteOffset() : number {
+  getWriteOffset(): number {
     return uws_res_get_write_offset(this.#ssl, this.#handler) as number;
   }
 
@@ -434,7 +430,7 @@ class HttpResponse {
    * You MUST return true for success, false for failure.
    * Writing nothing is always success, so by default you must return true.
    */
-  onWritable(handler: (offset: number) => boolean) : HttpResponse {
+  onWritable(handler: (offset: number) => boolean): HttpResponse {
     const handler_ = uws_res_on_writable_handler((_res, offset) => {
       return +!!handler(offset as number);
     });
@@ -446,14 +442,14 @@ class HttpResponse {
    * to it immediately inside of the callback. Returning from an Http request handler
    * without attaching (by calling onAborted) an abort handler is ill-use and will terminate.
    * When this event emits, the response has been aborted and may not be used. */
-  onAborted(handler: () => void) : HttpResponse {
+  onAborted(handler: () => void): HttpResponse {
     const handler_ = uws_res_on_aborted_handler(handler);
     uws_res_on_aborted(this.#ssl, this.#handler, handler_.pointer, null);
     return this;
   }
 
   /** Handler for reading data from POST and such requests. You MUST copy the data of chunk if isLast is not true. We Neuter ArrayBuffers on return, making it zero length.*/
-  onData(handler: (chunk: ArrayBuffer, isLast: boolean) => void) : HttpResponse {
+  onData(handler: (chunk: ArrayBuffer, isLast: boolean) => void): HttpResponse {
     const handler_ = uws_res_on_data_handler((_res, pointer, length, is_end) => {
       handler(getBuffer(pointer, length), !!is_end);
     });
@@ -462,28 +458,28 @@ class HttpResponse {
   }
 
   /** Returns the remote IP address in binary format (4 or 16 bytes). */
-  getRemoteAddress() : ArrayBuffer {
+  getRemoteAddress(): ArrayBuffer {
     const dest = new Uint8Array(16);
     const length = uws_res_get_remote_address(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
     return dest.slice(0, length as number);
   }
 
   /** Returns the remote IP address as text. */
-  getRemoteAddressAsText() : ArrayBuffer {
+  getRemoteAddressAsText(): ArrayBuffer {
     const dest = new Uint8Array(45); // maximum ipv6 length as text
     const length = uws_res_get_remote_address_as_text(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
     return dest.slice(0, length as number);
   }
 
   /** Returns the remote IP address in binary format (4 or 16 bytes), as reported by the PROXY Protocol v2 compatible proxy. */
-  getProxiedRemoteAddress() : ArrayBuffer {
+  getProxiedRemoteAddress(): ArrayBuffer {
     const dest = new Uint8Array(16);
     const length = uws_res_get_proxied_remote_address(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
     return dest.slice(0, length as number);
   }
 
   /** Returns the remote IP address as text, as reported by the PROXY Protocol v2 compatible proxy. */
-  getProxiedRemoteAddressAsText() : ArrayBuffer {
+  getProxiedRemoteAddressAsText(): ArrayBuffer {
     const dest = new Uint8Array(45); // maximum ipv6 length as text
     const length = uws_res_get_proxied_remote_address_as_text(this.#ssl, this.#handler, Deno.UnsafePointer.of(dest));
     return dest.slice(0, length as number);
@@ -502,13 +498,13 @@ class HttpResponse {
    *   res.writeStatus("200 OK").writeHeader("Some", "Value").write("Hello world!");
    * });
    */
-  cork(cb: () => void) : HttpResponse {
+  cork(cb: () => void): HttpResponse {
     uws_res_cork(this.#ssl, this.#handler, uws_res_cork_callback(cb).pointer, null);
     return this;
   }
 
   /** Upgrades a HttpResponse to a WebSocket. See UpgradeAsync, UpgradeSync example files. */
-  upgrade<UserData>(userData : UserData, secWebSocketKey: string, secWebSocketProtocol: string, secWebSocketExtensions: string, context: us_listen_socket) : void {
+  upgrade<UserData>(userData : UserData, secWebSocketKey: string, secWebSocketProtocol: string, secWebSocketExtensions: string, context: us_listen_socket): void {
     // TODO: find the way to ref/unref objects
     const secWebSocketKeyBuffer = encoder.encode(secWebSocketKey);
     const secWebSocketProtocolBuffer = encoder.encode(secWebSocketProtocol);
@@ -533,7 +529,7 @@ class HttpRequest {
   }
 
   /** Returns the lowercased header value or empty string. */
-  getHeader(lowerCaseKey: string) : string {
+  getHeader(lowerCaseKey: string): string {
     const headerBuffer = encoder.encode(lowerCaseKey);
     // https://github.com/uNetworking/uWebSockets.js/blob/master/src/HttpRequestWrapper.h#L97
     // as i see no one cares about overflows;
@@ -543,28 +539,28 @@ class HttpRequest {
     return getStringFromPointer(ptr, size);
   }
   /** Returns the parsed parameter at index. Corresponds to route. */
-  getParameter(index: number) : string {
+  getParameter(index: number): string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_parameter(this.#handler, index, ptr);
     return getStringFromPointer(ptr, size);
   }
   /** Returns the URL including initial /slash */
-  getUrl() : string {
+  getUrl(): string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_url(this.#handler, ptr);
     return getStringFromPointer(ptr, size);
   }
   /** Returns the lowercased HTTP method, useful for "any" routes. */
-  getMethod() : string {
+  getMethod(): string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_method(this.#handler, ptr);
     return getStringFromPointer(ptr, size);
   }
   /** Returns the HTTP method as-is. */
-  getCaseSensitiveMethod() : string {
+  getCaseSensitiveMethod(): string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     const size = uws_req_get_case_sensitive_method(this.#handler, ptr);
@@ -572,9 +568,9 @@ class HttpRequest {
   }
 
   /** Returns the raw querystring (the part of URL after ? sign) or empty string. */
-  getQuery() : string;
+  getQuery(): string;
   /** Returns a decoded query parameter value or empty string. */
-  getQuery(key?: string) : string {
+  getQuery(key?: string): string {
     const dest = new Uint8Array();
     const ptr = Deno.UnsafePointer.of(dest)
     let size;
@@ -588,14 +584,14 @@ class HttpRequest {
   }
 
   /** Loops over all headers. */
-  forEach(cb: (key: string, value: string) => void) : void {
+  forEach(cb: (key: string, value: string) => void): void {
     const handler = uws_get_headers_server_handler((key_ptr, key_size, val_ptr, val_size) => {
       cb(getStringFromPointer(key_ptr, key_size), getStringFromPointer(val_ptr, val_size));
     });
     uws_req_for_each_header(this.#handler, handler.pointer, null);
   }
   /** Setting yield to true is to say that this route handler did not handle the route, causing the router to continue looking for a matching route handler, or fail. */
-  setYield(yield_: boolean) : HttpRequest {
+  setYield(yield_: boolean): HttpRequest {
     uws_req_set_field(this.#handler, +yield_);
     return this;
   }
@@ -672,42 +668,50 @@ export enum CompressOptions {
     DEDICATED_COMPRESSOR = 15 << 4 | 8
 }
 
+const wss: Map<Deno.PointerValue, WebSocket<any>> = new Map();
+function getWebSocket<UserData>(ssl: number, handler: Deno.PointerValue): WebSocket<UserData> {
+  // https://github.com/uNetworking/uWebSockets/blob/master/misc/READMORE.md#use-the-websocketgetuserdata-feature
+  // if I have known method to ref deno objects I whould use getUserData instead
+  if (wss.has(handler)) return wss.get(handler) as WebSocket<UserData>;
+  const ws = new WebSocket(ssl, handler);
+  wss.set(handler, ws);
+  return ws as WebSocket<UserData>;
+}
+
 export function packWebsocketBehaviorBuffer<UserData>(ssl: number, behavior: WebSocketBehavior<UserData>): Uint8Array {
-  return Struct.pack(">hihhi????hhllllllll", [
+  return Struct.pack("<iiii???billllllll", [
     behavior.compression ?? CompressOptions.DISABLED,
-    behavior.maxPayloadLength ?? 16 * 1024,
+    behavior.maxPayloadLength ?? 16 * 1024 * 1024,
     behavior.idleTimeout ?? 12,
-    0,
     behavior.maxBackpressure ?? 64 * 1024,
     behavior.closeOnBackpressureLimit ?? false,
     behavior.resetIdleTimeoutOnSend ?? true,
     behavior.sendPingsAutomatically ?? true,
     0,
     behavior.maxLifetime ?? 0,
-    0,
     behavior.upgrade ? uws_websocket_upgrade_handler((res, req, context) => {
       behavior.upgrade!(new HttpResponse(ssl, res), new HttpRequest(req), context);
     }).pointer : 0,
     behavior.open ? uws_websocket_handler((ws) => {
-      behavior.open!(new WebSocket(ssl, ws));
+      behavior.open!(getWebSocket(ssl, ws));
     }).pointer : 0,
     behavior.message ? uws_websocket_message_handler((ws, messagePtr, length, opcode) => {
-      behavior.message!(new WebSocket(ssl, ws), getBuffer(messagePtr, length), opcode === OpCode.BINARY);
+      behavior.message!(getWebSocket(ssl, ws), getBuffer(messagePtr, length), opcode === OpCode.BINARY);
     }).pointer : 0,
     behavior.drain ? uws_websocket_handler((ws) => {
-      behavior.drain!(new WebSocket(ssl, ws));
+      behavior.drain!(getWebSocket(ssl, ws));
     }).pointer : 0,
     behavior.ping ? uws_websocket_ping_pong_handler((ws, messagePtr, length) => {
-      behavior.ping!(new WebSocket(ssl, ws), getBuffer(messagePtr, length));
+      behavior.ping!(getWebSocket(ssl, ws), messagePtr ? getBuffer(messagePtr, length) : new ArrayBuffer(0));
     }).pointer : 0,
     behavior.pong ? uws_websocket_ping_pong_handler((ws, messagePtr, length) => {
-      behavior.pong!(new WebSocket(ssl, ws), getBuffer(messagePtr, length));
+      behavior.pong!(getWebSocket(ssl, ws), messagePtr ? getBuffer(messagePtr, length) : new ArrayBuffer(0));
     }).pointer : 0,
     behavior.close ? uws_websocket_close_handler((ws, code, messagePtr, length) => {
-      behavior.close!(new WebSocket(ssl, ws), code, getBuffer(messagePtr, length));
+      behavior.close!(getWebSocket(ssl, ws), code, messagePtr ? getBuffer(messagePtr, length) : new ArrayBuffer(0));
     }).pointer : 0,
     behavior.subscription ? uws_websocket_subscription_handler((ws, topicPtr, length, newCount, oldCount) => {
-      behavior.subscription!(new WebSocket(ssl, ws), getBuffer(topicPtr, length), newCount as number, oldCount as number);
+      behavior.subscription!(getWebSocket(ssl, ws), getBuffer(topicPtr, length), newCount as number, oldCount as number);
     }).pointer : 0
   ]);
 }
@@ -761,7 +765,7 @@ class TemplatedApp {
       uws_app_listen_with_config(this.#ssl, this.#handle, configBuffer, listen_handler.pointer, null);
     }
 
-    uws_app_run(this.#ssl, this.#handle);
+    uws_app_run(this.#ssl, this.#handle); // wait uvloop
 
     return this;
   }
@@ -779,54 +783,54 @@ class TemplatedApp {
   }
 
   /** Registers an HTTP GET handler matching specified URL pattern. */
-  get(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  get(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_get, pattern, handler);
   }
   /** Registers an HTTP POST handler matching specified URL pattern. */
-  post(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  post(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_post, pattern, handler);
   }
   /** Registers an HTTP OPTIONS handler matching specified URL pattern. */
-  options(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  options(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_options, pattern, handler);
   }
   /** Registers an HTTP DELETE handler matching specified URL pattern. */
-  del(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  del(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_delete, pattern, handler);
   }
   /** Registers an HTTP PATCH handler matching specified URL pattern. */
-  patch(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  patch(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_patch, pattern, handler);
   }
   /** Registers an HTTP PUT handler matching specified URL pattern. */
-  put(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  put(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_put, pattern, handler);
   }
   /** Registers an HTTP HEAD handler matching specified URL pattern. */
-  head(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  head(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_head, pattern, handler);
   }
   /** Registers an HTTP CONNECT handler matching specified URL pattern. */
-  connect(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  connect(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_connect, pattern, handler);
   }
   /** Registers an HTTP TRACE handler matching specified URL pattern. */
-  trace(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  trace(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_trace, pattern, handler);
   }
   /** Registers an HTTP handler matching specified URL pattern on any HTTP method. */
-  any(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void) : TemplatedApp {
+  any(pattern: string, handler: (res: HttpResponse, req: HttpRequest) => void): TemplatedApp {
     return this.#generateHTTPHandler(uws_app_any, pattern, handler);
   }
 
   /** Registers a handler matching specified URL pattern where WebSocket upgrade requests are caught. */
-  ws<UserData>(pattern: string, behavior: WebSocketBehavior<UserData>) : TemplatedApp {
+  ws<UserData>(pattern: string, behavior: WebSocketBehavior<UserData>): TemplatedApp {
     const behaviorBuffer = packWebsocketBehaviorBuffer(this.#ssl, behavior);
     uws_ws(this.#ssl, this.#handle, Deno.UnsafePointer.of(toCString(pattern)), behaviorBuffer, null);
     return this;
   }
   /** Publishes a message under topic, for all WebSockets under this app. See WebSocket.publish. */
-  publish(topic: string, message: RecognizedString, isBinary?: boolean, compress = false) : boolean {
+  publish(topic: string, message: RecognizedString, isBinary?: boolean, compress = false): boolean {
     const topicBuffer = encoder.encode(topic);
     const messageBuffer= encode(message);
     return !!uws_publish(
@@ -836,7 +840,7 @@ class TemplatedApp {
       isBinary ? OpCode.BINARY : OpCode.TEXT, +compress);
   }
   /** Returns number of subscribers for this topic. */
-  numSubscribers(topic: string) : number {
+  numSubscribers(topic: string): number {
     const topicBuffer = encoder.encode(topic);
     return uws_num_subscribers(this.#ssl, this.#handle, Deno.UnsafePointer.of(topicBuffer), topicBuffer.length);
   }
