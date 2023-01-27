@@ -11,14 +11,14 @@ import meta from "../deno.json" assert { type: "json" };
 //   const char *ssl_ciphers;
 //   int ssl_prefer_low_memory_usage; /* Todo: rename to prefer_low_memory_usage and apply for TCP as well */
 // };
-const us_socket_context_options_t = ["pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "u8"];
+const us_socket_context_options_t: Deno.NativeType[] = ["pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "u8"];
 
 // struct uws_app_listen_config_t {
 //   int port;
 //   const char *host;
 //   int options;
 // };
-const uws_app_listen_config_t = ["u16", "pointer", "u8"];
+const uws_app_listen_config_t: Deno.NativeType[] = ["u16", "pointer", "u8"];
 
 // struct uws_socket_behavior_t {
 //     uws_compress_options_t compression;
@@ -44,13 +44,13 @@ const uws_app_listen_config_t = ["u16", "pointer", "u8"];
 //     uws_websocket_close_handler close;
 //     uws_websocket_subscription_handler subscription;
 // };
-const uws_socket_behavior_t = ["u16", "u32", "u16", "u16", "u32", "u8", "u8", "u8", "u32", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer"];
+const uws_socket_behavior_t: Deno.NativeType[] = ["u16", "u32", "u16", "u16", "u32", "u8", "u8", "u8", "u32", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer"];
 
 // struct uws_try_end_result_t {
 //   bool ok;
 //   bool has_responded;
 // };
-const uws_try_end_result_t = ["u8", "u8"];
+const uws_try_end_result_t: Deno.NativeType[] = ["u8", "u8"];
 
 const symbols = {
   // uws_app_t *uws_create_app(int ssl, struct us_socket_context_options_t options);
@@ -296,7 +296,7 @@ type Handlers<S extends ForeignLibraryCallbacksInterface> = {
 
 const handlers = Object.fromEntries(Object.entries(handlers_symbols).map(([name, def]) => [name, cb => new Deno.UnsafeCallback(def, cb)])) as Handlers<typeof handlers_symbols>;
 
-let lib: Deno.DynamicLibrary<typeof symbols>;
+let lib: Deno.DynamicLibrary<typeof symbols>["symbols"];
 
 try {
   const customPath = Deno.env.get("DENO_UWS_PATH");

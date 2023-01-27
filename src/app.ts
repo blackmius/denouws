@@ -187,9 +187,8 @@ function packListenConfigBuffer(config: ListenConfig) {
   )
 }
 
-function unpack_uws_try_end_result(pointer: Deno.PointerValue): [boolean, boolean] {
-  const view = new Deno.UnsafePointerView(pointer);
-  return [view.getBool(0), view.getBool(1)];
+function unpack_uws_try_end_result(buffer: Uint8Array): [boolean, boolean] {
+  return [!!buffer[0], !!buffer[1]];
 }
 
 /** Recognized string types, things C++ can read and understand as strings.
