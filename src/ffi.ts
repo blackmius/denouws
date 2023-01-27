@@ -1,9 +1,60 @@
 import { prepare } from "https://deno.land/x/plug@0.5.2/plug.ts";
 import meta from "../deno.json" assert { type: "json" };
 
+
+// struct us_socket_context_options_t {
+//   const char *key_file_name;
+//   const char *cert_file_name;
+//   const char *passphrase;
+//   const char *dh_params_file_name;
+//   const char *ca_file_name;
+//   const char *ssl_ciphers;
+//   int ssl_prefer_low_memory_usage; /* Todo: rename to prefer_low_memory_usage and apply for TCP as well */
+// };
+const us_socket_context_options_t = ["pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "u8"];
+
+// struct uws_app_listen_config_t {
+//   int port;
+//   const char *host;
+//   int options;
+// };
+const uws_app_listen_config_t = ["u16", "pointer", "u8"];
+
+// struct uws_socket_behavior_t {
+//     uws_compress_options_t compression;
+//     /* Maximum message size we can receive */
+//     unsigned int maxPayloadLength;
+//     /* 2 minutes timeout is good */
+//     unsigned short idleTimeout;
+//     /* 64kb backpressure is probably good */
+//     unsigned int maxBackpressure;
+//     bool closeOnBackpressureLimit;
+//     /* This one depends on kernel timeouts and is a bad default */
+//     bool resetIdleTimeoutOnSend;
+//     /* A good default, esp. for newcomers */
+//     bool sendPingsAutomatically;
+//     /* Maximum socket lifetime in seconds before forced closure (defaults to disabled) */
+//     unsigned short maxLifetime;
+//     uws_websocket_upgrade_handler upgrade;
+//     uws_websocket_handler open;
+//     uws_websocket_message_handler message;
+//     uws_websocket_handler drain;
+//     uws_websocket_ping_pong_handler ping;
+//     uws_websocket_ping_pong_handler pong;
+//     uws_websocket_close_handler close;
+//     uws_websocket_subscription_handler subscription;
+// };
+const uws_socket_behavior_t = ["u16", "u32", "u16", "u16", "u32", "u8", "u8", "u8", "u32", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer", "pointer"];
+
+// struct uws_try_end_result_t {
+//   bool ok;
+//   bool has_responded;
+// };
+const uws_try_end_result_t = ["u8", "u8"];
+
 const symbols = {
   // uws_app_t *uws_create_app(int ssl, struct us_socket_context_options_t options);
-  uws_create_app: { parameters: ["u8", "buffer"], result: "pointer" },
+  uws_create_app: { parameters: ["u8", { struct: us_socket_context_options_t }], result: "pointer" },
   // void uws_app_destroy(int ssl, uws_app_t *app);
   uws_app_destroy: { parameters: ["u8", "pointer"], result: "void"},
   // void uws_app_get(int ssl, uws_app_t *app, const char *pattern, uws_method_handler handler, void *user_data);
@@ -34,7 +85,7 @@ const symbols = {
   // void uws_app_listen(int ssl, uws_app_t *app, int port, uws_listen_handler handler, void *user_data);
   uws_app_listen: { parameters: ["u8", "pointer", "u16", "function", "pointer"], result: "void" },
   // void uws_app_listen_with_config(int ssl, uws_app_t *app, uws_app_listen_config_t config, uws_listen_handler handler, void *user_data);
-  uws_app_listen_with_config: { parameters: ["u8", "pointer", "buffer", "function", "pointer"], result: "void" },
+  uws_app_listen_with_config: { parameters: ["u8", "pointer", { struct: uws_app_listen_config_t }, "function", "pointer"], result: "void" },
   // void uws_app_listen_domain(int ssl, uws_app_t *app, const char *domain, size_t domain_length, uws_listen_domain_handler handler, void *user_data);
   uws_app_listen_domain: { parameters: ["u8", "pointer", "pointer", "usize", "function", "pointer"], result: "void" },
   // void uws_app_listen_domain_with_options(int ssl, uws_app_t *app, const char *domain,size_t domain_length, int options, uws_listen_domain_handler handler, void *user_data);
@@ -55,7 +106,7 @@ const symbols = {
   // void uws_add_server_name(int ssl, uws_app_t *app, const char *hostname_pattern, size_t hostname_pattern_length);
   uws_add_server_name: { parameters: ["u8", "pointer", "pointer", "usize"], result: "function" },
   // void uws_add_server_name_with_options(int ssl, uws_app_t *app, const char *hostname_pattern, size_t hostname_pattern_length, struct us_socket_context_options_t options);
-  uws_add_server_name_with_options: { parameters: ["u8", "pointer", "pointer", "usize", "buffer"], result: "function" },
+  uws_add_server_name_with_options: { parameters: ["u8", "pointer", "pointer", "usize", { struct: us_socket_context_options_t }], result: "function" },
   // void uws_missing_server_name(int ssl, uws_app_t *app, uws_missing_server_handler handler, void *user_data);
   uws_missing_server_name: { parameters: ["u8", "pointer", "function", "pointer"], result: "function" },
   // void uws_filter(int ssl, uws_app_t *app, uws_filter_handler handler, void *user_data);
@@ -64,7 +115,7 @@ const symbols = {
   // WebSocket
   
   // void uws_ws(int ssl, uws_app_t *app, const char *pattern, uws_socket_behavior_t behavior, void* user_data);
-  uws_ws: { parameters: ["u8", "pointer", "pointer", "buffer", "pointer"], result: "void" },
+  uws_ws: { parameters: ["u8", "pointer", "pointer", { struct: uws_socket_behavior_t }, "pointer"], result: "void" },
   // void *uws_ws_get_user_data(int ssl, uws_websocket_t *ws);
   uws_ws_get_user_data: { parameters: ["u8", "pointer"], result: "pointer" },
   // void uws_ws_close(int ssl, uws_websocket_t *ws);
@@ -115,7 +166,7 @@ const symbols = {
   // void uws_res_end(int ssl, uws_res_t *res, const char *data, size_t length, bool close_connection);
   uws_res_end: { parameters: ["u8", "pointer", "pointer", "usize", "u8"], result: "void" },
   // uws_try_end_result_t uws_res_try_end(int ssl, uws_res_t *res, const char *data, size_t length, uintmax_t total_size, bool close_connection);
-  uws_res_try_end: { parameters: ["u8", "pointer", "pointer", "usize", "usize", "u8"], result: "buffer" },
+  uws_res_try_end: { parameters: ["u8", "pointer", "pointer", "usize", "usize", "u8"], result: { struct: uws_try_end_result_t } },
   // void uws_res_cork(int ssl, uws_res_t *res, void(*callback)(uws_res_t *res, void* user_data) ,void* user_data);
   uws_res_cork: { parameters: ["u8", "pointer", "function", "pointer"], result: "void" },
   // void uws_res_pause(int ssl, uws_res_t *res);
@@ -191,7 +242,7 @@ const symbols = {
 
 const handlers_symbols = {
   // void (*uws_listen_handler)(struct us_listen_socket_t *listen_socket, uws_app_listen_config_t config, void *user_data);
-  uws_listen_handler: { parameters: ["pointer", "buffer", "pointer"], result: "void" },
+  uws_listen_handler: { parameters: ["pointer", { struct: uws_app_listen_config_t }, "pointer"], result: "void" },
   // void (*uws_listen_domain_handler)(struct us_listen_socket_t *listen_socket, const char* domain, size_t domain_length, int options, void *user_data);
   uws_listen_domain_handler: { parameters: ["pointer", "pointer", "usize", "u64", "pointer"], result: "void" },
   // void (*uws_method_handler)(uws_res_t *response, uws_req_t *request, void *user_data);
@@ -245,7 +296,7 @@ type Handlers<S extends ForeignLibraryCallbacksInterface> = {
 
 const handlers = Object.fromEntries(Object.entries(handlers_symbols).map(([name, def]) => [name, cb => new Deno.UnsafeCallback(def, cb)])) as Handlers<typeof handlers_symbols>;
 
-let lib: Deno.DynamicLibrary<typeof symbols>["symbols"];
+let lib: Deno.DynamicLibrary<typeof symbols>;
 
 try {
   const customPath = Deno.env.get("DENO_UWS_PATH");

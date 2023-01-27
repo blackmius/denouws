@@ -161,16 +161,7 @@ const {
 } = ffi;
 
 
-// struct us_socket_context_options_t {
-//   const char *key_file_name;
-//   const char *cert_file_name;
-//   const char *passphrase;
-//   const char *dh_params_file_name;
-//   const char *ca_file_name;
-//   const char *ssl_ciphers;
-//   int ssl_prefer_low_memory_usage; /* Todo: rename to prefer_low_memory_usage and apply for TCP as well */
-// };
-function getAppOptionsBuffer(options: AppOptions): Uint8Array {
+function packAppOptionsBuffer(options: AppOptions): Uint8Array {
   return Struct.pack(
     ">llllll?",
     [
@@ -185,12 +176,7 @@ function getAppOptionsBuffer(options: AppOptions): Uint8Array {
   )
 }
 
-// struct uws_app_listen_config_t {
-//   int port;
-//   const char *host;
-//   int options;
-// };
-function getListenConfigBuffer(config: ListenConfig) {
+function packListenConfigBuffer(config: ListenConfig) {
   return Struct.pack(
     ">ll?",
     [
@@ -201,10 +187,6 @@ function getListenConfigBuffer(config: ListenConfig) {
   )
 }
 
-// struct uws_try_end_result_t {
-//   bool ok;
-//   bool has_responded;
-// };
 function unpack_uws_try_end_result(pointer: Deno.PointerValue): [boolean, boolean] {
   const view = new Deno.UnsafePointerView(pointer);
   return [view.getBool(0), view.getBool(1)];
@@ -691,40 +673,19 @@ export enum CompressOptions {
     DEDICATED_COMPRESSOR = 15 << 4 | 8
 }
 
-// struct uws_socket_behavior_t {
-//     uws_compress_options_t compression;
-//     /* Maximum message size we can receive */
-//     unsigned int maxPayloadLength;
-//     /* 2 minutes timeout is good */
-//     unsigned short idleTimeout;
-//     /* 64kb backpressure is probably good */
-//     unsigned int maxBackpressure;
-//     bool closeOnBackpressureLimit;
-//     /* This one depends on kernel timeouts and is a bad default */
-//     bool resetIdleTimeoutOnSend;
-//     /* A good default, esp. for newcomers */
-//     bool sendPingsAutomatically;
-//     /* Maximum socket lifetime in seconds before forced closure (defaults to disabled) */
-//     unsigned short maxLifetime;
-//     uws_websocket_upgrade_handler upgrade;
-//     uws_websocket_handler open;
-//     uws_websocket_message_handler message;
-//     uws_websocket_handler drain;
-//     uws_websocket_ping_pong_handler ping;
-//     uws_websocket_ping_pong_handler pong;
-//     uws_websocket_close_handler close;
-//     uws_websocket_subscription_handler subscription;
-// };
-function getWebsocketBehaviorBuffer<UserData>(ssl: number, behavior: WebSocketBehavior<UserData>): Uint8Array {
-  return Struct.pack(">hlhl???hllllllll", [
+export function packWebsocketBehaviorBuffer<UserData>(ssl: number, behavior: WebSocketBehavior<UserData>): Uint8Array {
+  return Struct.pack(">hihhi????hhllllllll", [
     behavior.compression ?? CompressOptions.DISABLED,
     behavior.maxPayloadLength ?? 16 * 1024,
     behavior.idleTimeout ?? 12,
+    0,
     behavior.maxBackpressure ?? 64 * 1024,
     behavior.closeOnBackpressureLimit ?? false,
     behavior.resetIdleTimeoutOnSend ?? true,
     behavior.sendPingsAutomatically ?? true,
+    0,
     behavior.maxLifetime ?? 0,
+    0,
     behavior.upgrade ? uws_websocket_upgrade_handler((res, req, context) => {
       behavior.upgrade!(new HttpResponse(ssl, res), new HttpRequest(req), context);
     }).pointer : 0,
@@ -765,10 +726,10 @@ class TemplatedApp {
   constructor(ssl: number, options?: AppOptions) {
     this.#ssl = ssl;
     if (this.#ssl) {
-      const optionsBuffer = getAppOptionsBuffer(options!);
-      this.#handle = uws_create_app(this.#ssl, optionsBuffer);
+      const optionsBuffer = packAppOptionsBuffer(options!);
+      this.#handle = uws_create_app(this.#ssl, optionsBuffer.buffer);
     } else {
-      this.#handle = uws_create_app(this.#ssl, null);
+      this.#handle = uws_create_app(this.#ssl, new ArrayBuffer(1));
     }
   }
 
@@ -797,7 +758,7 @@ class TemplatedApp {
         config.port = port;
       }
       const listen_handler = uws_listen_handler((listen_socket: us_listen_socket) => cb(listen_socket));
-      const configBuffer = getListenConfigBuffer(config);
+      const configBuffer = packListenConfigBuffer(config);
       uws_app_listen_with_config(this.#ssl, this.#handle, configBuffer, listen_handler.pointer, null);
     }
 
@@ -861,7 +822,7 @@ class TemplatedApp {
 
   /** Registers a handler matching specified URL pattern where WebSocket upgrade requests are caught. */
   ws<UserData>(pattern: string, behavior: WebSocketBehavior<UserData>) : TemplatedApp {
-    const behaviorBuffer = getWebsocketBehaviorBuffer(this.#ssl, behavior);
+    const behaviorBuffer = packWebsocketBehaviorBuffer(this.#ssl, behavior);
     uws_ws(this.#ssl, this.#handle, Deno.UnsafePointer.of(toCString(pattern)), behaviorBuffer, null);
     return this;
   }
@@ -884,7 +845,7 @@ class TemplatedApp {
   addServerName(hostname: string, options?: AppOptions): TemplatedApp {
     const hostnameBuffer = encoder.encode(hostname);
     if (options) {
-      const optionsBuffer = getAppOptionsBuffer(options);
+      const optionsBuffer = packAppOptionsBuffer(options);
       uws_add_server_name_with_options(this.#ssl, this.#handle, Deno.UnsafePointer.of(hostnameBuffer), hostnameBuffer.length, optionsBuffer);
     } else {
       uws_add_server_name(this.#ssl, this.#handle, Deno.UnsafePointer.of(hostnameBuffer), hostnameBuffer.length);
