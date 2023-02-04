@@ -657,7 +657,6 @@ extern "C"
                     .sendPingsAutomatically = behavior.sendPingsAutomatically,
                     .maxLifetime = behavior.maxLifetime,
                 };
-
                 if (behavior.upgrade)
                     generic_handler.upgrade = [behavior](auto *res, auto *req, auto *context)
                     {

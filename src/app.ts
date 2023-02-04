@@ -698,9 +698,12 @@ export function packWebsocketBehaviorBuffer<UserData>(ssl: number, workerHandler
     behavior.upgrade ? uws_websocket_upgrade_handler((res, req, context) => {
       behavior.upgrade!(new HttpResponse(ssl, workerHandler, res), new HttpRequest(workerHandler, req), context);
     }).pointer : 0,
-    behavior.open ? uws_websocket_handler((ws) => {
-      behavior.open!(getWebSocket(ssl, workerHandler, ws));
-    }).pointer : 0,
+    uws_websocket_handler((wsHandler) => {
+      const ws = getWebSocket<UserData>(ssl, workerHandler, wsHandler);
+      if (behavior.open) {
+        behavior.open(ws);
+      }
+    }).pointer,
     behavior.message ? uws_websocket_message_handler((ws, messagePtr, length, opcode) => {
       behavior.message!(getWebSocket(ssl, workerHandler, ws), getBuffer(messagePtr, length), opcode === OpCode.BINARY);
     }).pointer : 0,
@@ -713,9 +716,13 @@ export function packWebsocketBehaviorBuffer<UserData>(ssl: number, workerHandler
     behavior.pong ? uws_websocket_ping_pong_handler((ws, messagePtr, length) => {
       behavior.pong!(getWebSocket(ssl, workerHandler, ws), messagePtr ? getBuffer(messagePtr, length) : new ArrayBuffer(0));
     }).pointer : 0,
-    behavior.close ? uws_websocket_close_handler((ws, code, messagePtr, length) => {
-      behavior.close!(getWebSocket(ssl, workerHandler, ws), code, messagePtr ? getBuffer(messagePtr, length) : new ArrayBuffer(0));
-    }).pointer : 0,
+    uws_websocket_close_handler((wsHandler, code, messagePtr, length) => {
+      const ws = getWebSocket<UserData>(ssl, workerHandler, wsHandler);
+      if (behavior.close) {
+        behavior.close(ws, code, messagePtr ? getBuffer(messagePtr, length) : new ArrayBuffer(0));
+      }
+      wss.delete(wsHandler);
+    }).pointer,
     behavior.subscription ? uws_websocket_subscription_handler((ws, topicPtr, length, newCount, oldCount) => {
       behavior.subscription!(getWebSocket(ssl, workerHandler, ws), getBuffer(topicPtr, length), newCount as number, oldCount as number);
     }).pointer : 0
