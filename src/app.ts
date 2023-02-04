@@ -226,7 +226,7 @@ class _WebSocket<UserData> {
     const data = encode(message);
     return uws_ws_send_with_options(
       this.#ssl, this.#workerHandler, this.#wsHandler, Deno.UnsafePointer.of(data), data.length,
-      isBinary ? OpCode.BINARY : OpCode.TEXT, +!!compress, 0);
+      isBinary ? OpCode.BINARY : OpCode.TEXT, +!!compress, 1);
   }
 
   /** Returns the bytes buffered in backpressure. This is similar to the bufferedAmount property in the browser counterpart.

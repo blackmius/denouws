@@ -457,23 +457,14 @@ extern "C"
 
     unsigned int uws_num_subscribers(int ssl, uws_worker_t *worker, const char *topic, size_t topic_length)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        unsigned int result;
         Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, w, topic, topic_length, &result, &cv]() {
-            if (ssl)
-            {
-                uWS::SSLApp *uwsApp = (uWS::SSLApp *)w->app;
-                result = uwsApp->numSubscribers(std::string_view(topic, topic_length));
-            }
-            uWS::App *uwsApp = (uWS::App *)w->app;
-            result = uwsApp->numSubscribers(std::string_view(topic, topic_length));
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::SSLApp *uwsApp = (uWS::SSLApp *)w->app;
+            return uwsApp->numSubscribers(std::string_view(topic, topic_length));
+        }
+        uWS::App *uwsApp = (uWS::App *)w->app;
+        return uwsApp->numSubscribers(std::string_view(topic, topic_length));
     }
     bool uws_publish(int ssl, uws_worker_t *worker, const char *topic, size_t topic_length, const char *message, size_t message_length, uws_opcode_t opcode, bool compress)
     {
@@ -715,196 +706,129 @@ extern "C"
 
     void uws_ws_close(int ssl, uws_worker_t *worker, uws_websocket_t *ws)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                uws->close();
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                uws->close();
-            }
-        });
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            uws->close();
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            uws->close();
+        }
     }
 
     uws_sendstatus_t uws_ws_send(int ssl, uws_worker_t *worker, uws_websocket_t *ws, const char *message, size_t length, uws_opcode_t opcode)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        uws_sendstatus_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, message, length, opcode, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                result = (uws_sendstatus_t)uws->send(std::string_view(message, length), (uWS::OpCode)(unsigned char)opcode);
-            }
-            else {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                result = (uws_sendstatus_t)uws->send(std::string_view(message, length), (uWS::OpCode)(unsigned char)opcode);
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            return (uws_sendstatus_t)uws->send(std::string_view(message, length), (uWS::OpCode)(unsigned char)opcode);
+        }
+        else {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            return (uws_sendstatus_t)uws->send(std::string_view(message, length), (uWS::OpCode)(unsigned char)opcode);
+        }
     }
 
     uws_sendstatus_t uws_ws_send_with_options(int ssl, uws_worker_t *worker, uws_websocket_t *ws, const char *message, size_t length, uws_opcode_t opcode, bool compress, bool fin)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        uws_sendstatus_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, message, length, opcode, compress, fin, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                result = (uws_sendstatus_t)uws->send(std::string_view(message, length), (uWS::OpCode)(unsigned char)opcode, compress, fin);
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                result = (uws_sendstatus_t)uws->send(std::string_view(message, length), (uWS::OpCode)(unsigned char)opcode, compress, fin);
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            return (uws_sendstatus_t)uws->send(std::string_view(message, length), (uWS::OpCode)(unsigned char)opcode, compress, fin);
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            return (uws_sendstatus_t)uws->send(std::string_view(message, length), (uWS::OpCode)(unsigned char)opcode, compress, fin);
+        }
     }
 
     void uws_ws_end(int ssl, uws_worker_t *worker, uws_websocket_t *ws, int code, const char *message, size_t length)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, code, message, length]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                uws->end(code, std::string_view(message, length));
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                uws->end(code, std::string_view(message, length));
-            }
-        });
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            uws->end(code, std::string_view(message, length));
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            uws->end(code, std::string_view(message, length));
+        }
     }
 
     void uws_ws_cork(int ssl, uws_worker_t *worker, uws_websocket_t *ws, void (*handler)())
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, handler]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                uws->cork([handler]()
-                        { handler(); });
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            uws->cork([handler]()
+                    { handler(); });
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
 
-                uws->cork([handler]()
-                        { handler(); });
-            }
-        });
+            uws->cork([handler]()
+                    { handler(); });
+        }
     }
     bool uws_ws_subscribe(int ssl, uws_worker_t *worker, uws_websocket_t *ws, const char *topic, size_t length)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        bool result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, topic, length, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                result = uws->subscribe(std::string_view(topic, length));
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                result = uws->subscribe(std::string_view(topic, length));
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            return uws->subscribe(std::string_view(topic, length));
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            return uws->subscribe(std::string_view(topic, length));
+        }
     }
     bool uws_ws_unsubscribe(int ssl, uws_worker_t *worker, uws_websocket_t *ws, const char *topic, size_t length)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        bool result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, topic, length, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                result = uws->unsubscribe(std::string_view(topic, length));
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                result = uws->unsubscribe(std::string_view(topic, length));
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            return uws->unsubscribe(std::string_view(topic, length));
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            return uws->unsubscribe(std::string_view(topic, length));
+        }
     }
 
     bool uws_ws_is_subscribed(int ssl, uws_worker_t *worker, uws_websocket_t *ws, const char *topic, size_t length)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        bool result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, topic, length, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                result = uws->isSubscribed(std::string_view(topic, length));
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                result = uws->isSubscribed(std::string_view(topic, length));
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            return uws->isSubscribed(std::string_view(topic, length));
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            return uws->isSubscribed(std::string_view(topic, length));
+        }
     }
     void uws_ws_iterate_topics(int ssl, uws_worker_t *worker, uws_websocket_t *ws, void (*callback)(const char *topic, size_t length))
     {
-        std::mutex m;
-        std::condition_variable cv;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, callback, &cv]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                uws->iterateTopics([callback](auto topic)
-                                { callback(topic.data(), topic.length()); });
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                uws->iterateTopics([callback](auto topic)
-                                { callback(topic.data(), topic.length()); });
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            uws->iterateTopics([callback](auto topic)
+                            { callback(topic.data(), topic.length()); });
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            uws->iterateTopics([callback](auto topic)
+                            { callback(topic.data(), topic.length()); });
+        }
     }
 
     bool uws_ws_publish(int ssl, uws_worker_t *worker, uws_websocket_t *ws, const char *topic, size_t topic_length, const char *message, size_t message_length)
@@ -957,88 +881,57 @@ extern "C"
 
     unsigned int uws_ws_get_buffered_amount(int ssl, uws_worker_t *worker, uws_websocket_t *ws)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        unsigned int result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                result = uws->getBufferedAmount();
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                result = uws->getBufferedAmount();
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            return uws->getBufferedAmount();
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            return uws->getBufferedAmount();
+        }
     }
 
 
     size_t uws_ws_get_remote_address(int ssl, uws_worker_t *worker, uws_websocket_t *ws, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, dest, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                std::string_view value = uws->getRemoteAddress();
-                *dest = value.data();
-                result = value.length();
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                std::string_view value = uws->getRemoteAddress();
-                *dest = value.data();
-                result = value.length();
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            std::string_view value = uws->getRemoteAddress();
+            *dest = value.data();
+            return value.length();
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            std::string_view value = uws->getRemoteAddress();
+            *dest = value.data();
+            return value.length();
+        }
     }
 
     size_t uws_ws_get_remote_address_as_text(int ssl, uws_worker_t *worker, uws_websocket_t *ws, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, ws, dest, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
-                std::string_view value = uws->getRemoteAddressAsText();
-                *dest = value.data();
-                result = value.length();
-            }
-            else
-            {
-                uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
-                std::string_view value = uws->getRemoteAddressAsText();
-                *dest = value.data();
-                result = value.length();
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::WebSocket<true, true, void *> *uws = (uWS::WebSocket<true, true, void *> *)ws;
+            std::string_view value = uws->getRemoteAddressAsText();
+            *dest = value.data();
+            return value.length();
+        }
+        else
+        {
+            uWS::WebSocket<false, true, void *> *uws = (uWS::WebSocket<false, true, void *> *)ws;
+            std::string_view value = uws->getRemoteAddressAsText();
+            *dest = value.data();
+            return value.length();
+        }
     }
 
     void uws_res_end(int ssl, uws_worker_t *worker, uws_res_t *res, const char *data, size_t length, bool close_connection)
     {
-        Worker* w = (Worker*) worker;
         if (ssl)
         {
             uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
@@ -1053,368 +946,263 @@ extern "C"
 
     size_t uws_res_get_remote_address(int ssl, uws_worker_t *worker, uws_res_t *res, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, dest, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                std::string_view value = uwsRes->getRemoteAddress();
-                *dest = value.data();
-                result = value.length();
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                std::string_view value = uwsRes->getRemoteAddress();
-                *dest = value.data();
-                result = value.length();
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            std::string_view value = uwsRes->getRemoteAddress();
+            *dest = value.data();
+            return value.length();
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            std::string_view value = uwsRes->getRemoteAddress();
+            *dest = value.data();
+            return value.length();
+        }
     }
 
     size_t uws_res_get_remote_address_as_text(int ssl, uws_worker_t *worker, uws_res_t *res, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, dest, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                std::string_view value = uwsRes->getRemoteAddressAsText();
-                *dest = value.data();
-                result = value.length();
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                std::string_view value = uwsRes->getRemoteAddressAsText();
-                *dest = value.data();
-                result = value.length();
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            std::string_view value = uwsRes->getRemoteAddressAsText();
+            *dest = value.data();
+            return value.length();
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            std::string_view value = uwsRes->getRemoteAddressAsText();
+            *dest = value.data();
+            return value.length();
+        }
     }
 
     size_t uws_res_get_proxied_remote_address(int ssl, uws_worker_t *worker, uws_res_t *res, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, dest, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                std::string_view value = uwsRes->getProxiedRemoteAddress();
-                *dest = value.data();
-                result = value.length();
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                std::string_view value = uwsRes->getProxiedRemoteAddress();
-                *dest = value.data();
-                result = value.length();
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            std::string_view value = uwsRes->getProxiedRemoteAddress();
+            *dest = value.data();
+            return value.length();
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            std::string_view value = uwsRes->getProxiedRemoteAddress();
+            *dest = value.data();
+            return value.length();
+        }
     }
 
     size_t uws_res_get_proxied_remote_address_as_text(int ssl, uws_worker_t *worker, uws_res_t *res, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, dest, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                std::string_view value = uwsRes->getProxiedRemoteAddressAsText();
-                *dest = value.data();
-                result = value.length();
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                std::string_view value = uwsRes->getProxiedRemoteAddressAsText();
-                *dest = value.data();
-                result = value.length();
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            std::string_view value = uwsRes->getProxiedRemoteAddressAsText();
+            *dest = value.data();
+            return value.length();
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            std::string_view value = uwsRes->getProxiedRemoteAddressAsText();
+            *dest = value.data();
+            return value.length();
+        }
     }
 
     uws_try_end_result_t uws_res_try_end(int ssl, uws_worker_t *worker, uws_res_t *res, const char *data, size_t length, uintmax_t total_size, bool close_connection)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        uws_try_end_result_t result_;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, data, length, total_size, close_connection, &cv, &result_]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                // uwsRes->end(std::string_view(data, length), close_connection);
-                std::pair<bool, bool> result = uwsRes->tryEnd(std::string_view(data, length), total_size, close_connection);
-                result_ = uws_try_end_result_t{
-                    .ok = result.first,
-                    .has_responded = result.second,
-                };
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                std::pair<bool, bool> result = uwsRes->tryEnd(std::string_view(data, length), total_size);
-                result_ = uws_try_end_result_t{
-                    .ok = result.first,
-                    .has_responded = result.second,
-                };
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result_;
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            std::pair<bool, bool> result = uwsRes->tryEnd(std::string_view(data, length), total_size, close_connection);
+            return uws_try_end_result_t{
+                .ok = result.first,
+                .has_responded = result.second,
+            };
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            std::pair<bool, bool> result = uwsRes->tryEnd(std::string_view(data, length), total_size);
+            return uws_try_end_result_t{
+                .ok = result.first,
+                .has_responded = result.second,
+            };
+        }
     }
 
     void uws_res_cork(int ssl, uws_worker_t *worker, uws_res_t *res, void (*callback)(uws_res_t *res))
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, callback]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                uwsRes->cork([=]()
-                            { callback(res); });
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                uwsRes->cork([=]()
-                            { callback(res); });
-            }
-        });
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            uwsRes->cork([=]()
+                        { callback(res); });
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            uwsRes->cork([=]()
+                        { callback(res); });
+        }
     }
 
     void uws_res_pause(int ssl, uws_worker_t *worker, uws_res_t *res)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                uwsRes->pause();
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                uwsRes->pause();
-            }
-        });
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            uwsRes->pause();
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            uwsRes->pause();
+        }
     }
 
     void uws_res_resume(int ssl, uws_worker_t *worker, uws_res_t *res)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                uwsRes->pause();
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                uwsRes->pause();
-            }
-        });
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            uwsRes->pause();
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            uwsRes->pause();
+        }
     }
 
     void uws_res_write_continue(int ssl, uws_worker_t *worker, uws_res_t *res)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                uwsRes->writeContinue();
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                uwsRes->writeContinue();
-            }
-        });
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            uwsRes->writeContinue();
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            uwsRes->writeContinue();
+        }
     }
 
     void uws_res_write_status(int ssl, uws_worker_t *worker, uws_res_t *res, const char *status, size_t length)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, status, length]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                uwsRes->writeStatus(std::string_view(status, length));
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                uwsRes->writeStatus(std::string_view(status, length));
-            }
-        });
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            uwsRes->writeStatus(std::string_view(status, length));
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            uwsRes->writeStatus(std::string_view(status, length));
+        }
     }
 
     void uws_res_write_header(int ssl, uws_worker_t *worker, uws_res_t *res, const char *key, size_t key_length, const char *value, size_t value_length)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, key, key_length, value, value_length]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                uwsRes->writeHeader(std::string_view(key, key_length), std::string_view(value, value_length));
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                uwsRes->writeHeader(std::string_view(key, key_length), std::string_view(value, value_length));
-            }
-        });
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            uwsRes->writeHeader(std::string_view(key, key_length), std::string_view(value, value_length));
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            uwsRes->writeHeader(std::string_view(key, key_length), std::string_view(value, value_length));
+        }
     }
     void uws_res_write_header_int(int ssl, uws_worker_t *worker, uws_res_t *res, const char *key, size_t key_length, uint64_t value)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, key, key_length, value]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                uwsRes->writeHeader(std::string_view(key, key_length), value);
-            }
-            else
-            {
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            uwsRes->writeHeader(std::string_view(key, key_length), value);
+        }
+        else
+        {
 
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                uwsRes->writeHeader(std::string_view(key, key_length), value);
-            }
-        });
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            uwsRes->writeHeader(std::string_view(key, key_length), value);
+        }
     }
 
     void uws_res_end_without_body(int ssl, uws_worker_t *worker, uws_res_t *res, bool close_connection)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, close_connection]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                uwsRes->endWithoutBody(std::nullopt, close_connection);
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                uwsRes->endWithoutBody(std::nullopt, close_connection);
-            }
-        });
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            uwsRes->endWithoutBody(std::nullopt, close_connection);
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            uwsRes->endWithoutBody(std::nullopt, close_connection);
+        }
     }
 
     bool uws_res_write(int ssl, uws_worker_t *worker, uws_res_t *res, const char *data, size_t length)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        bool result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, data, length, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                result = uwsRes->write(std::string_view(data, length));
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                result = uwsRes->write(std::string_view(data, length));
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            return uwsRes->write(std::string_view(data, length));
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            return uwsRes->write(std::string_view(data, length));
+        }
     }
     uintmax_t uws_res_get_write_offset(int ssl, uws_worker_t *worker, uws_res_t *res)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        uintmax_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                result = uwsRes->getWriteOffset();
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                result = uwsRes->getWriteOffset();
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            return uwsRes->getWriteOffset();
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            return uwsRes->getWriteOffset();
+        }
     }
     void uws_res_override_write_offset(int ssl, uws_worker_t *worker, uws_res_t *res, uintmax_t offset)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, offset]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                uwsRes->overrideWriteOffset(offset);
-            }
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            uwsRes->overrideWriteOffset(offset);
+        }
+        else
+        {
             uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
             uwsRes->overrideWriteOffset(offset);
-        });
+        }
     }
     bool uws_res_has_responded(int ssl, uws_worker_t *worker, uws_res_t *res)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        bool result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, &cv, &result]() {
-            if (ssl)
-            {
-                uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
-                result = uwsRes->hasResponded();
-            }
-            else
-            {
-                uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-                result = uwsRes->hasResponded();
-            }
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        if (ssl)
+        {
+            uWS::HttpResponse<true> *uwsRes = (uWS::HttpResponse<true> *)res;
+            return uwsRes->hasResponded();
+        }
+        else
+        {
+            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+            return uwsRes->hasResponded();
+        }
     }
 
     void uws_res_on_writable(int ssl, uws_worker_t *worker, uws_res_t *res, bool (*handler)(uws_res_t *res, uintmax_t))
@@ -1476,193 +1264,94 @@ extern "C"
 
     bool uws_req_is_ancient(uws_worker_t *worker, uws_req_t *res)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        bool result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, &cv, &result]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            result = uwsReq->isAncient();
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        return uwsReq->isAncient();
     }
 
     bool uws_req_get_yield(uws_worker_t *worker, uws_req_t *res)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        bool result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, &cv, &result]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            result =  uwsReq->getYield();
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        return uwsReq->getYield();
     }
 
     void uws_req_set_field(uws_worker_t *worker, uws_req_t *res, bool yield)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, yield]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            return uwsReq->setYield(yield);
-        });
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        return uwsReq->setYield(yield);
     }
 
     size_t uws_req_get_url(uws_worker_t *worker, uws_req_t *res, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, dest, &cv, &result]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            std::string_view value = uwsReq->getUrl();
-            *dest = value.data();
-            result = value.length();
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        std::string_view value = uwsReq->getUrl();
+        *dest = value.data();
+        return value.length();
     }
 
     size_t uws_req_get_full_url(uws_worker_t *worker, uws_req_t *res, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, dest, &cv, &result]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            std::string_view value = uwsReq->getFullUrl();
-            *dest = value.data();
-            result = value.length();
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        std::string_view value = uwsReq->getFullUrl();
+        *dest = value.data();
+        return value.length();
     }
 
     size_t uws_req_get_method(uws_worker_t *worker, uws_req_t *res, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, dest, &cv, &result]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            std::string_view value = uwsReq->getMethod();
-            *dest = value.data();
-            result = value.length();
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        std::string_view value = uwsReq->getMethod();
+        *dest = value.data();
+        return value.length();
     }
 
     size_t uws_req_get_case_sensitive_method(uws_worker_t *worker, uws_req_t *res, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, dest, &cv, &result]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            std::string_view value = uwsReq->getCaseSensitiveMethod();
-            *dest = value.data();
-            result = value.length();
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        std::string_view value = uwsReq->getCaseSensitiveMethod();
+        *dest = value.data();
+        return value.length();
     }
 
     void uws_req_for_each_header(uws_worker_t *worker, uws_req_t *res, uws_get_headers_server_handler handler)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, handler]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            for (auto header : *uwsReq)
-            {
-                handler(header.first.data(), header.first.length(), header.second.data(), header.second.length());
-            }
-        });
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        for (auto header : *uwsReq)
+        {
+            handler(header.first.data(), header.first.length(), header.second.data(), header.second.length());
+        }
     }
 
     size_t uws_req_get_header(uws_worker_t *worker, uws_req_t *res, const char *lower_case_header, size_t lower_case_header_length, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, lower_case_header, lower_case_header_length, dest, &cv, &result]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            std::string_view value = uwsReq->getHeader(std::string_view(lower_case_header, lower_case_header_length));
-            *dest = value.data();
-            result = value.length();
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        std::string_view value = uwsReq->getHeader(std::string_view(lower_case_header, lower_case_header_length));
+        *dest = value.data();
+        return value.length();
     }
 
     size_t uws_req_get_query(uws_worker_t *worker, uws_req_t *res, const char *key, size_t key_length, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, key, key_length, dest, &cv, &result]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            std::string_view value = uwsReq->getQuery(std::string_view(key, key_length));
-            *dest = value.data();
-            result = value.length();
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        std::string_view value = uwsReq->getQuery(std::string_view(key, key_length));
+        *dest = value.data();
+        return value.length();
     }
 
     size_t uws_req_get_parameter(uws_worker_t *worker, uws_req_t *res, unsigned short index, const char **dest)
     {
-        std::mutex m;
-        std::condition_variable cv;
-        size_t result;
-        Worker* w = (Worker*) worker;
-        w->loop->defer([res, index, dest, &cv, &result]() {
-            uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
-            std::string_view value = uwsReq->getParameter(index);
-            *dest = value.data();
-            result = value.length();
-            cv.notify_one();
-        });
-        std::unique_lock lk(m);
-        cv.wait(lk);
-        return result;
+        uWS::HttpRequest *uwsReq = (uWS::HttpRequest *)res;
+        std::string_view value = uwsReq->getParameter(index);
+        *dest = value.data();
+        return value.length();
     }
 
     void uws_res_upgrade(int ssl, uws_worker_t *worker, uws_res_t *res, void *data, const char *sec_web_socket_key, size_t sec_web_socket_key_length, const char *sec_web_socket_protocol, size_t sec_web_socket_protocol_length, const char *sec_web_socket_extensions, size_t sec_web_socket_extensions_length, uws_socket_context_t *ws)
     {
-        Worker* w = (Worker*) worker;
-        w->loop->defer([ssl, res, data, sec_web_socket_key, sec_web_socket_key_length, sec_web_socket_protocol, sec_web_socket_protocol_length, sec_web_socket_extensions, sec_web_socket_extensions_length, ws]() {
-            uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
-            uwsRes->template upgrade<void *>(data ? std::move(data) : NULL,
-                                            std::string_view(sec_web_socket_key, sec_web_socket_key_length),
-                                            std::string_view(sec_web_socket_protocol, sec_web_socket_protocol_length),
-                                            std::string_view(sec_web_socket_extensions, sec_web_socket_extensions_length),
-                                            (struct us_socket_context_t *)ws);
-        });
+        uWS::HttpResponse<false> *uwsRes = (uWS::HttpResponse<false> *)res;
+        uwsRes->template upgrade<void *>(data ? std::move(data) : NULL,
+                                        std::string_view(sec_web_socket_key, sec_web_socket_key_length),
+                                        std::string_view(sec_web_socket_protocol, sec_web_socket_protocol_length),
+                                        std::string_view(sec_web_socket_extensions, sec_web_socket_extensions_length),
+                                        (struct us_socket_context_t *)ws);
     }
 }
