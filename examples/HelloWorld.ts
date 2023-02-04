@@ -2,7 +2,7 @@ import { App } from '../mod.ts';
 
 const port = 9001;
 
-App().any('/*', (res) => {
+App().any('*', (res) => {
     res.end('Hello world from deno uws!');
 }).listen(port, (token) => {
     if (token) {

@@ -6,7 +6,7 @@ interface Counter {
     count: number
 }
 
-App().ws<Counter>('/*', {
+App().ws<Counter>('*', {
     open(ws) {
         ws.count = 0;
         console.log('open', ws.count);
@@ -14,6 +14,7 @@ App().ws<Counter>('/*', {
     message(ws) {
         ws.count += 1;
         console.log('message', ws.count)
+        console.log(ws.send('pong'));
     },
     close(ws) {
         console.log('close', ws.count);
@@ -21,11 +22,7 @@ App().ws<Counter>('/*', {
 }).listen(port, (token) => {
     if (token) {
         console.log('Listening to port ' + port);
-        // const ws = new WebSocket("ws://127.0.0.1:9001");
-        // ws.onopen = console.log;
-        // ws.onerror = console.error;
-        // ws.onclose = console.log;
-        // console.log(ws.readyState, WebSocket.CONNECTING);
+        // new WebSocket("ws://127.0.0.1:9001");
     } else {
         console.log('Failed to listen to port ' + port);
     }
